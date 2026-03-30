@@ -118,8 +118,5 @@ app.use((err, req, res, next) => {
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
-const listEndpoints = require('express-list-endpoints');
 
-console.log('📌 Registered Endpoints:');
-console.log(listEndpoints(app));
 module.exports = app;
