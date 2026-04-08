@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const app = express();
+
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -16,11 +18,15 @@ const propertyRoutes = require('./routes/properties.routes');
 const reviewRoutes = require('./routes/reviews.routes');
 const feedbackRoutes = require('./routes/feedbacks.routes');
 const bookingRoutes = require('./routes/bookings.routes');
+const landlordRoutes = require('./routes/landlord.routes');
+const ninVerifyRoutes   = require('./routes/ninVerification.routes'); // ← NEW
+// Use routes
+app.use('/api/landlord-verifications', landlordRoutes);
 
 // Import passport config
 require('./config/passport');
 
-const app = express();
+
 
 // Security middleware
 app.use(helmet());
@@ -91,6 +97,7 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/feedbacks', feedbackRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/nin-verification', ninVerifyRoutes); // ← NEW
 
 // Health check
 app.get('/api/health', (req, res) => {

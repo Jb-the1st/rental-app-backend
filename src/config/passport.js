@@ -54,37 +54,37 @@ passport.use(new GoogleStrategy({
   }
 ));
 
-// Facebook Strategy
-passport.use(new FacebookStrategy({
-    clientID: process.env.FACEBOOK_APP_ID,
-    clientSecret: process.env.FACEBOOK_APP_SECRET,
-    callbackURL: process.env.FACEBOOK_CALLBACK_URL,
-    profileFields: ['id', 'emails', 'name', 'picture.type(large)']
-  },
-  async (accessToken, refreshToken, profile, done) => {
-    try {
-      let user = await User.findOne({ email: profile.emails[0].value });
+// // Facebook Strategy
+// passport.use(new FacebookStrategy({
+//     clientID: process.env.FACEBOOK_APP_ID,
+//     clientSecret: process.env.FACEBOOK_APP_SECRET,
+//     callbackURL: process.env.FACEBOOK_CALLBACK_URL,
+//     profileFields: ['id', 'emails', 'name', 'picture.type(large)']
+//   },
+//   async (accessToken, refreshToken, profile, done) => {
+//     try {
+//       let user = await User.findOne({ email: profile.emails[0].value });
 
-      if (user) {
-        return done(null, user);
-      }
+//       if (user) {
+//         return done(null, user);
+//       }
 
-      user = await User.create({
-        firstName: profile.name.givenName,
-        lastName: profile.name.familyName,
-        email: profile.emails[0].value,
-        password: Math.random().toString(36),
-        role: 'tenant',
-        imageUrl: profile.photos[0]?.value,
-        phone: 0,
-        company: ''
-      });
+//       user = await User.create({
+//         firstName: profile.name.givenName,
+//         lastName: profile.name.familyName,
+//         email: profile.emails[0].value,
+//         password: Math.random().toString(36),
+//         role: 'tenant',
+//         imageUrl: profile.photos[0]?.value,
+//         phone: 0,
+//         company: ''
+//       });
 
-      done(null, user);
-    } catch (error) {
-      done(error, null);
-    }
-  }
-));
+//       done(null, user);
+//     } catch (error) {
+//       done(error, null);
+//     }
+//   }
+// ));
 
 module.exports = passport;

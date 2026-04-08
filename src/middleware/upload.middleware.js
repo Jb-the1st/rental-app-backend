@@ -20,28 +20,12 @@ const imageOnlyFilter = (req, file, cb) => {
   cb(new Error('Only image files are allowed'));
 };
 
-// ─── Memory storage (buffer files, then push to Cloudinary manually) ───────
+const anyFileFilter = (req, file, cb) => cb(null, true);
+
+// ─── Memory storage ────────────────────────────────────────────────────────
 const memoryStorage = multer.memoryStorage();
 
-const propertyMulter = multer({
-  storage: memoryStorage,
-  limits: { fileSize: MAX_VIDEO_MB * 1024 * 1024 },
-  fileFilter: propertyFileFilter,
-});
-
-const feedbackMulter = multer({
-  storage: memoryStorage,
-  limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024 },
-  fileFilter: imageOnlyFilter,
-});
-
-const userMulter = multer({
-  storage: memoryStorage,
-  limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024 },
-  fileFilter: imageOnlyFilter,
-});
-
-// ─── Upload a buffer to Cloudinary via upload_stream ──────────────────────
+// ─── Upload a buffer to Cloudinary ────────────────────────────────────────
 const uploadToCloudinary = (buffer, options) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
@@ -52,7 +36,25 @@ const uploadToCloudinary = (buffer, options) => {
   });
 };
 
-// ─── Second middleware: push buffered files to Cloudinary ──────────────────
+// ─── Multer error wrapper ──────────────────────────────────────────────────
+const handleMulterError = (multerFn) => (req, res, next) => {
+  multerFn(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE')
+      return res.status(400).json({
+        success: false,
+        message: `File too large. Max: images ${MAX_IMAGE_MB}MB, videos ${MAX_VIDEO_MB}MB`,
+      });
+    if (err.code === 'LIMIT_FILE_COUNT')
+      return res.status(400).json({
+        success: false,
+        message: `Too many files. Max ${MAX_FILES} per upload`,
+      });
+    return res.status(400).json({ success: false, message: err.message });
+  });
+};
+
+// ─── Push buffered files to Cloudinary ────────────────────────────────────
 const pushToCloudinary = (folder, avatarCrop = false) => {
   return async (req, res, next) => {
     try {
@@ -92,7 +94,7 @@ const pushToCloudinary = (folder, avatarCrop = false) => {
         })
       );
 
-      req.uploadedMedia = uploaded; // controllers read from here
+      req.uploadedMedia = uploaded;
       next();
     } catch (err) {
       return res.status(400).json({ success: false, message: err.message });
@@ -100,40 +102,42 @@ const pushToCloudinary = (folder, avatarCrop = false) => {
   };
 };
 
-// ─── Multer error wrapper ──────────────────────────────────────────────────
-const handleMulterError = (multerFn) => (req, res, next) => {
-  multerFn(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE')
-      return res.status(400).json({
-        success: false,
-        message: `File too large. Max: images ${MAX_IMAGE_MB}MB, videos ${MAX_VIDEO_MB}MB`,
-      });
-    if (err.code === 'LIMIT_FILE_COUNT')
-      return res.status(400).json({
-        success: false,
-        message: `Too many files. Max ${MAX_FILES} per upload`,
-      });
-    return res.status(400).json({ success: false, message: err.message });
-  });
-};
-
-// ─── Exported upload middleware sets ──────────────────────────────────────
-// Each is an ARRAY — spread them in your route:
-//   router.post('/', ...upload.propertyMedia, controller)
+// ─── Exported upload middleware ────────────────────────────────────────────
+// All exports are ARRAYS — spread them in your routes:
+//   router.post('/path', ...upload.propertyMedia, controller)
+//   router.post('/path', ...upload.single('document'), controller)
 
 const upload = {
+  // Multiple images + videos for properties (field name: "media")
   propertyMedia: [
-    handleMulterError(propertyMulter.array('media', MAX_FILES)),
+    handleMulterError(multer({ storage: memoryStorage, limits: { fileSize: MAX_VIDEO_MB * 1024 * 1024 }, fileFilter: propertyFileFilter }).array('media', MAX_FILES)),
     pushToCloudinary('rental-app/properties'),
   ],
+
+  // Single image for feedback (field name: "image")
   feedbackImage: [
-    handleMulterError(feedbackMulter.single('image')),
+    handleMulterError(multer({ storage: memoryStorage, limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024 }, fileFilter: imageOnlyFilter }).single('image')),
     pushToCloudinary('rental-app/feedbacks'),
   ],
+
+  // Single avatar image for user profile (field name: "avatar")
   userAvatar: [
-    handleMulterError(userMulter.single('avatar')),
+    handleMulterError(multer({ storage: memoryStorage, limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024 }, fileFilter: imageOnlyFilter }).single('avatar')),
     pushToCloudinary('rental-app/users', true),
+  ],
+
+  // Generic single file upload — use for documents, etc.
+  // Usage: ...upload.single('fieldName')
+  single: (fieldName) => [
+    handleMulterError(multer({ storage: memoryStorage, limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024 }, fileFilter: anyFileFilter }).single(fieldName)),
+    pushToCloudinary('rental-app/documents'),
+  ],
+
+  // Generic multiple file upload
+  // Usage: ...upload.array('fieldName', maxCount)
+  array: (fieldName, maxCount = MAX_FILES) => [
+    handleMulterError(multer({ storage: memoryStorage, limits: { fileSize: MAX_VIDEO_MB * 1024 * 1024 }, fileFilter: anyFileFilter }).array(fieldName, maxCount)),
+    pushToCloudinary('rental-app/misc'),
   ],
 };
 
