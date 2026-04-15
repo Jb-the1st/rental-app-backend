@@ -44,7 +44,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://your-frontend-app.vercel.app', // Add your frontend URL
+    'https://rentright-psi.vercel.app', // Add your frontend URL
     'https://your-frontend-app.netlify.app'  // Add your frontend URL
   ],
   credentials: true,
