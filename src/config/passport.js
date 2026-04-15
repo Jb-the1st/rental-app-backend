@@ -20,39 +20,39 @@ passport.deserializeUser(async (id, done) => {
 });
 
 // Google Strategy
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    // clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL
-  },
-  async (accessToken, refreshToken, profile, done) => {
-    try {
-      // Check if user exists
-      let user = await User.findOne({ email: profile.emails[0].value });
+// passport.use(new GoogleStrategy({
+//     clientID: process.env.GOOGLE_CLIENT_ID,
+//     // clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+//     callbackURL: process.env.GOOGLE_CALLBACK_URL
+//   },
+//   async (accessToken, refreshToken, profile, done) => {
+//     try {
+//       // Check if user exists
+//       let user = await User.findOne({ email: profile.emails[0].value });
 
-      if (user) {
-        // User exists, return user
-        return done(null, user);
-      }
+//       if (user) {
+//         // User exists, return user
+//         return done(null, user);
+//       }
 
-      // Create new user
-      user = await User.create({
-        firstName: profile.name.givenName,
-        lastName: profile.name.familyName,
-        email: profile.emails[0].value,
-        password: Math.random().toString(36), // Random password
-        role: 'tenant',
-        imageUrl: profile.photos[0]?.value,
-        phone: 0,
-        company: ''
-      });
+//       // Create new user
+//       user = await User.create({
+//         firstName: profile.name.givenName,
+//         lastName: profile.name.familyName,
+//         email: profile.emails[0].value,
+//         password: Math.random().toString(36), // Random password
+//         role: 'tenant',
+//         imageUrl: profile.photos[0]?.value,
+//         phone: 0,
+//         company: ''
+//       });
 
-      done(null, user);
-    } catch (error) {
-      done(error, null);
-    }
-  }
-));
+//       done(null, user);
+//     } catch (error) {
+//       done(error, null);
+//     }
+//   }
+// ));
 
 // // Facebook Strategy
 // passport.use(new FacebookStrategy({
