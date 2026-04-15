@@ -10,7 +10,7 @@ const passport = require('passport');
 const session = require('express-session');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
-
+app.set('trust proxy', 1);
 // Import routes
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/users.routes');
