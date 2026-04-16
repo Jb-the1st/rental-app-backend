@@ -20,7 +20,7 @@ const UserSchema = new mongoose.Schema({
     type: String, required: [true, 'Password is required'], minlength: 8, select: false,
     match: [/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, 'Password must include uppercase, lowercase, number, and special character'],
   },
-  role: { type: String, enum: ['tenant', 'landlord', 'admin'], default: 'tenant' },
+  role: { type: String, enum: ['user', 'owner', 'admin'], default: 'tenant' },
 
   // NIN
   NIN: {
