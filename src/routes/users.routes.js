@@ -33,7 +33,7 @@ const {
 
 const { protect, authorize } = require('../middleware/auth.middleware');
 
-router.get('/', protect, authorize('admin'), getUsers);
+router.get('/', protect, getUsers);
 router.get('/:id', protect, getUser);
 router.put('/:id', protect, updateUser);
 router.delete('/:id', protect, authorize('admin'), deleteUser);
