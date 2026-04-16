@@ -43,7 +43,7 @@ exports.register = async (req, res) => {
       phone: user.phone,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: 'An error occured'});
   }
 };
 
