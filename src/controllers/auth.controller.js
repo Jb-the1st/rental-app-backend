@@ -20,7 +20,7 @@ exports.register = async (req, res) => {
     const user = await User.create({
       firstName, lastName, email, phone, password,
       company: company || '',
-      role: 'tenant',
+      role: 'user',
       isEmailVerified: false,
       isPhoneVerified: false,
       emailVerificationToken: emailOTP,

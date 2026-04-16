@@ -120,7 +120,7 @@ exports.reviewLandlordVerification = async (req, res) => {
     user.landlordVerification.reviewedBy = req.user._id;
 
     if (status === 'approved') {
-      user.role = 'landlord';
+      user.role = 'Owner';
       user.landlordVerification.rejectionReason = undefined;
     } else if (status === 'rejected') {
       user.landlordVerification.rejectionReason = rejectionReason;
@@ -130,7 +130,7 @@ exports.reviewLandlordVerification = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Landlord verification ${status}`,
+      message: `Owner verification ${status}`,
       user: user.toJSON(),
     });
   } catch (error) {
