@@ -81,7 +81,7 @@ exports.toggleRole = async (req, res) => {
     }
  
     // Toggle between admin and tenant
-    user.role = user.role === 'admin' ? 'tenant' : 'admin';
+    user.role = user.role === 'admin' ? 'user' : 'admin';
     await user.save();
  
     res.json({ success: true, user: user.toJSON() });
