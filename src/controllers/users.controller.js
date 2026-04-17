@@ -76,20 +76,20 @@ exports.deleteUser = async (req, res) => {
 exports.toggleRole = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
+
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
- 
-    // Toggle between admin and tenant
+
     user.role = user.role === 'admin' ? 'user' : 'admin';
+
     await user.save();
- 
-    res.json({ success: true, user: user.toJSON() });
+
+    res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // const User = require('../models/User');
 
 // // @desc    Get all users

@@ -14,13 +14,14 @@ const UserSchema = new mongoose.Schema({
   type: String,
   required: [true, 'Phone number is required'],
   trim: true,
+  unique: true,
   match: [/^0(?:70|80|81|90|91)\d{8}$/, 'Please enter a valid Nigerian phone number'],
 },
   password: {
     type: String, required: [true, 'Password is required'], minlength: 8, select: false,
     match: [/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, 'Password must include uppercase, lowercase, number, and special character'],
   },
-  role: { type: String, enum: ['user', 'owner', 'admin'], default: 'tenant' },
+  role: { type: String, enum: ['user', 'owner', 'admin'], default: 'user' },
 
   // NIN
   NIN: {
