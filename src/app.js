@@ -73,7 +73,7 @@ const swaggerSpec = swaggerJsdoc({
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ✅ 8. Static files
-app.use('/uploads', express.static('uploads'));
+// app.use('/uploads', express.static('uploads'));
 
 // ✅ 9. Routes last
 const authRoutes = require('./routes/auth.routes');

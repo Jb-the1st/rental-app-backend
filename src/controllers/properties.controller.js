@@ -1,20 +1,28 @@
 const Property = require('../models/Property');
 const cloudinary = require('../config/cloudinary');
 
-// // Helper: extract media array from multer-cloudinary upload
-// const files = req.files;
-//   files.map((file) => ({
-//   }));
-
-// Helper: delete files from Cloudinary by public_id
-const deleteFromCloudinary = async (mediaArray = []) => {
-  await Promise.all(
-    mediaArray.map((item) =>
-      cloudinary.uploader.destroy(item.publicId, {
-        resource_type: item.resourceType,
-      })
-    )
-  );
+// Helper — uploads a multer file buffer/path to Cloudinary
+// Returns the secure URL or throws
+const uploadToCloudinary = async (file) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'rental-app/properties' },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+    // multer stores the file in memory when using memoryStorage,
+    // or on disk when using diskStorage.
+    // We support both: buffer (memoryStorage) or path (diskStorage).
+    if (file.buffer) {
+      const { Readable } = require('stream');
+      Readable.from(file.buffer).pipe(stream);
+    } else {
+      const fs = require('fs');
+      fs.createReadStream(file.path).pipe(stream);
+    }
+  });
 };
 
 // @desc  Get all properties
@@ -22,14 +30,12 @@ const deleteFromCloudinary = async (mediaArray = []) => {
 // @access Public
 exports.getProperties = async (req, res) => {
   try {
-    const properties = await Property.find().populate(
-      'owner',
-      'firstName lastName email phone imageUrl'
-    );
+    const properties = await Property.find()
+      .populate('owner', 'firstName lastName email phone imageUrl');
     res.json({
       success: true,
       count: properties.length,
-      properties: properties.map((p) => p.toJSON()),
+      properties: properties.map(p => p.toJSON())
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -41,13 +47,11 @@ exports.getProperties = async (req, res) => {
 // @access Public
 exports.getProperty = async (req, res) => {
   try {
-    const property = await Property.findById(req.params.id).populate(
-      'owner',
-      'firstName lastName email phone imageUrl'
-    );
-    if (!property)
+    const property = await Property.findById(req.params.id)
+      .populate('owner', 'firstName lastName email phone imageUrl');
+    if (!property) {
       return res.status(404).json({ success: false, message: 'Property not found' });
-
+    }
     res.json({ success: true, property: property.toJSON() });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -56,14 +60,21 @@ exports.getProperty = async (req, res) => {
 
 // @desc  Create property
 // @route POST /api/properties
-// @access Private/Landlord
+// @access Private/Landlord or Admin
 exports.createProperty = async (req, res) => {
   try {
     req.body.owner = req.user._id;
 
-    // Attach uploaded media (images/videos) from Cloudinary
-    if (req.uploadedMedia && req.uploadedMedia.length > 0) {
-      req.body.media = req.uploadedMedia;
+    // Upload image to Cloudinary if a file was attached
+    if (req.file) {
+      try {
+        req.body.imageUrl = await uploadToCloudinary(req.file);
+      } catch (uploadError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Image upload failed: ' + uploadError.message
+        });
+      }
     }
 
     const property = await Property.create(req.body);
@@ -81,29 +92,31 @@ exports.createProperty = async (req, res) => {
 exports.updateProperty = async (req, res) => {
   try {
     let property = await Property.findById(req.params.id);
-    if (!property)
-      return res.status(404).json({ success: false, message: 'Property not found' });
 
-    // Check ownership
-    if (
-      property.owner.toString() !== req.user._id.toString() &&
-      req.user.role !== 'admin'
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to update this property',
-      });
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found' });
     }
 
-    // If new files uploaded, delete old ones from Cloudinary then replace
-    if (req.uploadedMedia && req.uploadedMedia.length > 0) {
-      await deleteFromCloudinary(property.media);
-      req.body.media = req.uploadedMedia;
+    // Only the owner or admin can update
+    if (property.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this property' });
+    }
+
+    // Upload new image to Cloudinary if a file was attached
+    if (req.file) {
+      try {
+        req.body.imageUrl = await uploadToCloudinary(req.file);
+      } catch (uploadError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Image upload failed: ' + uploadError.message
+        });
+      }
     }
 
     property = await Property.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
-      runValidators: true,
+      runValidators: true
     }).populate('owner', 'firstName lastName email phone imageUrl');
 
     res.json({ success: true, property: property.toJSON() });
@@ -112,64 +125,20 @@ exports.updateProperty = async (req, res) => {
   }
 };
 
-// @desc  Delete a single media file from a property
-// @route DELETE /api/properties/:id/media/:publicId
-// @access Private/Owner
-exports.deletePropertyMedia = async (req, res) => {
-  try {
-    const property = await Property.findById(req.params.id);
-    if (!property)
-      return res.status(404).json({ success: false, message: 'Property not found' });
-
-    if (
-      property.owner.toString() !== req.user._id.toString() &&
-      req.user.role !== 'admin'
-    ) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
-    }
-
-    const publicId = decodeURIComponent(req.params.publicId);
-    const mediaItem = property.media.find((m) => m.publicId === publicId);
-
-    if (!mediaItem)
-      return res.status(404).json({ success: false, message: 'Media file not found' });
-
-    // Delete from Cloudinary
-    await cloudinary.uploader.destroy(publicId, {
-      resource_type: mediaItem.resourceType,
-    });
-
-    // Remove from property's media array
-    property.media = property.media.filter((m) => m.publicId !== publicId);
-    await property.save();
-
-    res.json({ success: true, message: 'Media deleted', property: property.toJSON() });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
 // @desc  Delete property
 // @route DELETE /api/properties/:id
-// @access Private/Owner
+// @access Private/Owner or Admin
 exports.deleteProperty = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id);
-    if (!property)
-      return res.status(404).json({ success: false, message: 'Property not found' });
 
-    if (
-      property.owner.toString() !== req.user._id.toString() &&
-      req.user.role !== 'admin'
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to delete this property',
-      });
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found' });
     }
 
-    // Delete all media from Cloudinary before removing the property
-    await deleteFromCloudinary(property.media);
+    if (property.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this property' });
+    }
 
     await property.deleteOne();
     res.json({ success: true, message: 'Property deleted successfully' });
@@ -183,14 +152,12 @@ exports.deleteProperty = async (req, res) => {
 // @access Public
 exports.getPropertiesByOwner = async (req, res) => {
   try {
-    const properties = await Property.find({ owner: req.params.userId }).populate(
-      'owner',
-      'firstName lastName email phone imageUrl'
-    );
+    const properties = await Property.find({ owner: req.params.userId })
+      .populate('owner', 'firstName lastName email phone imageUrl');
     res.json({
       success: true,
       count: properties.length,
-      properties: properties.map((p) => p.toJSON()),
+      properties: properties.map(p => p.toJSON())
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
