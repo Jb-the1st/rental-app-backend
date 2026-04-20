@@ -167,9 +167,9 @@ exports.verifyEmail = async (req, res) => {
 //   }
 // };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
+// @desc  Login user — works whether or not email is verified
+// @route POST /api/auth/login
+// @access Public
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -201,19 +201,33 @@ exports.login = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-// @desc    Get current logged in user
-// @route   GET /api/auth/me
-// @access  Private
+ 
+// @desc  Get logged-in user profile + always returns a fresh token
+//        Call this on every app load and store the returned token.
+//        This way any role change in the DB is reflected immediately —
+//        no more stale token / 403 issues after manual DB edits.
+// @route GET /api/auth/me
+// @access Private
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    res.json({ success: true, user: user.toJSON() });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+ 
+    // Fresh token signed against current DB role — fixes stale role 403s
+    const freshToken = generateToken(user._id);
+ 
+    res.json({
+      success: true,
+      token: freshToken,
+      user: user.toJSON()
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
- 
+
 // @desc  Logout
 // @route POST /api/auth/logout
 // @access Private
