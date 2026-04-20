@@ -84,6 +84,7 @@ const feedbackRoutes = require('./routes/feedbacks.routes');
 const bookingRoutes = require('./routes/bookings.routes');
 const landlordRoutes = require('./routes/landlord.routes');
 const ninVerifyRoutes = require('./routes/ninVerification.routes');
+const notificationRoutes  = require('./routes/notifications.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -93,6 +94,8 @@ app.use('/api/feedbacks', feedbackRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/landlord-verifications', landlordRoutes);
 app.use('/api/nin-verification', ninVerifyRoutes);
+app.use('/api/notifications',    notificationRoutes); // NEW
+
 
 // Health check
 app.get('/api/health', (req, res) => {

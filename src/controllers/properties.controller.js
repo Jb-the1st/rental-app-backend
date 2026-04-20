@@ -1,28 +1,38 @@
 const Property = require('../models/Property');
 const cloudinary = require('../config/cloudinary');
 
-// Helper — uploads a multer file buffer/path to Cloudinary
-// Returns the secure URL or throws
-const uploadToCloudinary = async (file) => {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: 'rental-app/properties' },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result.secure_url);
-      }
-    );
-    // multer stores the file in memory when using memoryStorage,
-    // or on disk when using diskStorage.
-    // We support both: buffer (memoryStorage) or path (diskStorage).
-    if (file.buffer) {
+// ─── Cloudinary upload helper ─────────────────────────────────────────────────
+// Handles THREE cases the frontend might send:
+//   1. multipart/form-data file  → req.file  (buffer from memoryStorage)
+//   2. base64 data URI in body   → req.body.imageUrl = "data:image/...;base64,..."
+//   3. No image sent             → returns undefined, no imageUrl saved
+const uploadImageToCloudinary = async (req) => {
+  // Case 1: real file via multipart/form-data
+  if (req.file) {
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'rental-app/properties' },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      );
       const { Readable } = require('stream');
-      Readable.from(file.buffer).pipe(stream);
-    } else {
-      const fs = require('fs');
-      fs.createReadStream(file.path).pipe(stream);
-    }
-  });
+      Readable.from(req.file.buffer).pipe(stream);
+    });
+    return result.secure_url;
+  }
+
+  // Case 2: base64 data URI sent as JSON body field
+  if (req.body.imageUrl && req.body.imageUrl.startsWith('data:')) {
+    const result = await cloudinary.uploader.upload(req.body.imageUrl, {
+      folder: 'rental-app/properties'
+    });
+    return result.secure_url;
+  }
+
+  // Case 3: nothing — keep existing imageUrl or leave undefined
+  return undefined;
 };
 
 // @desc  Get all properties
@@ -65,16 +75,13 @@ exports.createProperty = async (req, res) => {
   try {
     req.body.owner = req.user._id;
 
-    // Upload image to Cloudinary if a file was attached
-    if (req.file) {
-      try {
-        req.body.imageUrl = await uploadToCloudinary(req.file);
-      } catch (uploadError) {
-        return res.status(500).json({
-          success: false,
-          message: 'Image upload failed: ' + uploadError.message
-        });
-      }
+    const cloudinaryUrl = await uploadImageToCloudinary(req);
+    if (cloudinaryUrl) {
+      req.body.imageUrl = cloudinaryUrl;
+    } else {
+      // Remove the raw base64 string if Cloudinary upload wasn't triggered
+      // so we don't store a 100KB string in MongoDB
+      delete req.body.imageUrl;
     }
 
     const property = await Property.create(req.body);
@@ -82,13 +89,14 @@ exports.createProperty = async (req, res) => {
 
     res.status(201).json({ success: true, property: property.toJSON() });
   } catch (error) {
+    console.error('createProperty error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // @desc  Update property
 // @route PUT /api/properties/:id
-// @access Private/Owner
+// @access Private/Owner or Admin
 exports.updateProperty = async (req, res) => {
   try {
     let property = await Property.findById(req.params.id);
@@ -97,21 +105,19 @@ exports.updateProperty = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Property not found' });
     }
 
-    // Only the owner or admin can update
-    if (property.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (
+      property.owner.toString() !== req.user._id.toString() &&
+      req.user.role !== 'admin'
+    ) {
       return res.status(403).json({ success: false, message: 'Not authorized to update this property' });
     }
 
-    // Upload new image to Cloudinary if a file was attached
-    if (req.file) {
-      try {
-        req.body.imageUrl = await uploadToCloudinary(req.file);
-      } catch (uploadError) {
-        return res.status(500).json({
-          success: false,
-          message: 'Image upload failed: ' + uploadError.message
-        });
-      }
+    const cloudinaryUrl = await uploadImageToCloudinary(req);
+    if (cloudinaryUrl) {
+      req.body.imageUrl = cloudinaryUrl;
+    } else {
+      // Don't overwrite existing imageUrl if no new image was sent
+      delete req.body.imageUrl;
     }
 
     property = await Property.findByIdAndUpdate(req.params.id, req.body, {
@@ -121,6 +127,7 @@ exports.updateProperty = async (req, res) => {
 
     res.json({ success: true, property: property.toJSON() });
   } catch (error) {
+    console.error('updateProperty error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -136,7 +143,10 @@ exports.deleteProperty = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Property not found' });
     }
 
-    if (property.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (
+      property.owner.toString() !== req.user._id.toString() &&
+      req.user.role !== 'admin'
+    ) {
       return res.status(403).json({ success: false, message: 'Not authorized to delete this property' });
     }
 
