@@ -20,7 +20,7 @@ router.get('/owner/:userId', getPropertiesByOwner);
 router.get('/:id', getProperty);
 
 // requireEmailVerified blocks unverified users with a clear message
-router.post('/', protect, requireEmailVerified, authorize('landlord', 'admin'), upload.single('image'), createProperty);
+router.post('/', protect, requireEmailVerified, authorize('owner', 'admin'), upload.single('image'), createProperty);
 router.put('/:id', protect, requireEmailVerified, upload.single('image'), updateProperty);
 router.delete('/:id', protect, deleteProperty);
 
