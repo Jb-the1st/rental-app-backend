@@ -2,203 +2,151 @@ const User = require('../models/User');
 const NinVerification = require('../models/NinVerification');
 const { generateToken } = require('../utils/jwt');
 
-const getDelayMs = () => {
-  const hours = parseFloat(process.env.NIN_VERIFICATION_DELAY_HOURS || 24);
-  return hours * 60 * 60 * 1000;
+const getDelayMs = () => parseFloat(process.env.NIN_VERIFICATION_DELAY_HOURS || 24) * 3600000;
+
+// Keeps user.verifyOwner in sync so frontend always sees it on the user object
+const syncVerifyOwner = async (userId, patch) => {
+  await User.findByIdAndUpdate(userId, { $set: { verifyOwner: patch } });
 };
 
-// @desc  Submit NIN verification form
-// @route POST /api/nin-verification/submit
-// @access Private
+// POST /api/nin-verification/submit
 exports.submitNinVerification = async (req, res) => {
   try {
-    const { nin, firstName, lastName, currentAddress } = req.body;
+    const { nin, firstName, lastName, currentAddress, DoB } = req.body;
 
-    if (!nin || !firstName || !lastName || !currentAddress) {
-      return res.status(400).json({
-        success: false,
-        message: 'nin, firstName, lastName and currentAddress are all required'
-      });
-    }
+    if (!nin || !firstName || !lastName || !currentAddress)
+      return res.status(400).json({ success: false, message: 'nin, firstName, lastName and currentAddress are all required' });
 
-    if (!/^\d{11}$/.test(nin)) {
-      return res.status(400).json({
-        success: false,
-        message: 'NIN must be exactly 11 digits'
-      });
-    }
+    if (!/^\d{11}$/.test(nin))
+      return res.status(400).json({ success: false, message: 'NIN must be exactly 11 digits' });
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.role === 'landlord') return res.status(400).json({ success: false, message: 'Already a landlord' });
 
-    if (user.role === 'landlord') {
-      return res.status(400).json({ success: false, message: 'You are already a landlord' });
-    }
-
-    const firstNameMatch = user.firstName.toLowerCase() === firstName.trim().toLowerCase();
-    const lastNameMatch  = user.lastName.toLowerCase()  === lastName.trim().toLowerCase();
-
-    if (!firstNameMatch || !lastNameMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'First name and last name must match your registered account information'
-      });
-    }
+    if (user.firstName.toLowerCase() !== firstName.trim().toLowerCase() ||
+        user.lastName.toLowerCase()  !== lastName.trim().toLowerCase())
+      return res.status(400).json({ success: false, message: 'Name must match your registered account information' });
 
     const existing = await NinVerification.findOne({ user: user._id });
+    if (existing && ['pending', 'processing', 'verified'].includes(existing.status))
+      return res.status(400).json({ success: false, message: `Request already exists with status: ${existing.status}` });
+
+    const deadline = new Date(Date.now() + getDelayMs());
 
     if (existing) {
-      if (['pending', 'processing', 'verified'].includes(existing.status)) {
-        return res.status(400).json({
-          success: false,
-          message: `A verification request already exists with status: ${existing.status}`,
-          verification: _safeVerification(existing)
-        });
-      }
-
-      existing.nin                  = nin;
-      existing.firstName            = firstName.trim();
-      existing.lastName             = lastName.trim();
-      existing.currentAddress       = currentAddress.trim();
-      existing.status               = 'processing';
-      existing.submittedAt          = new Date();
-      existing.verificationDeadline = new Date(Date.now() + getDelayMs());
-      existing.adminNote            = '';
-      existing.roleUpgraded         = false;
+      Object.assign(existing, { nin, firstName: firstName.trim(), lastName: lastName.trim(),
+        currentAddress: currentAddress.trim(), status: 'processing',
+        submittedAt: new Date(), verificationDeadline: deadline, adminNote: '', roleUpgraded: false });
       await existing.save();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Verification re-submitted. Your information is being reviewed.',
-        verification: _safeVerification(existing)
-      });
+    } else {
+      await NinVerification.create({ user: user._id, nin,
+        firstName: firstName.trim(), lastName: lastName.trim(),
+        currentAddress: currentAddress.trim(),
+        status: 'processing', submittedAt: new Date(), verificationDeadline: deadline });
     }
 
-    const verification = await NinVerification.create({
-      user:                 user._id,
-      nin,
-      firstName:            firstName.trim(),
-      lastName:             lastName.trim(),
-      currentAddress:       currentAddress.trim(),
-      status:               'processing',
-      submittedAt:          new Date(),
-      verificationDeadline: new Date(Date.now() + getDelayMs())
+    // Sync into user.verifyOwner — frontend reads this from the user object
+    await syncVerifyOwner(user._id, {
+      NIN: parseInt(nin),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      DoB: DoB || '',
+      address: currentAddress.trim(),
+      status: 'processing',
+      verifiedAt: ''
     });
 
+    const updatedUser = await User.findById(user._id);
     res.status(201).json({
       success: true,
-      message: 'Verification submitted. Your NIN is being verified — this usually takes up to 24 hours.',
-      verification: _safeVerification(verification)
+      message: 'Verification submitted. Your NIN is being verified.',
+      user: updatedUser.toJSON()
     });
 
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-// @desc  Check verification status — auto-promotes + returns FRESH TOKEN
-// @route GET /api/nin-verification/status
-// @access Private
+// GET /api/nin-verification/status
 exports.getVerificationStatus = async (req, res) => {
   try {
     const verification = await NinVerification.findOne({ user: req.user.id });
-
-    if (!verification) {
-      return res.status(404).json({ success: false, message: 'No verification request found' });
-    }
+    if (!verification) return res.status(404).json({ success: false, message: 'No verification request found' });
 
     let freshToken = null;
 
-    if (
-      verification.status === 'processing' &&
-      !verification.roleUpgraded &&
-      new Date() >= verification.verificationDeadline
-    ) {
-      verification.status       = 'verified';
+    if (verification.status === 'processing' && !verification.roleUpgraded && new Date() >= verification.verificationDeadline) {
+      verification.status = 'verified';
       verification.roleUpgraded = true;
       await verification.save();
 
-      await User.findByIdAndUpdate(req.user.id, { role: 'landlord' });
+      const now = new Date().toISOString();
+      await User.findByIdAndUpdate(req.user.id, {
+        role: 'landlord',
+        'verifyOwner.status': 'verified',
+        'verifyOwner.verifiedAt': now
+      });
 
-      // Fresh token with updated role — frontend must store this and use it going forward
       freshToken = generateToken(req.user.id);
     }
 
-    const response = {
-      success: true,
-      verification: _safeVerification(verification)
-    };
+    const obj = verification.toObject();
+    delete obj.nin;
 
+    const response = { success: true, verification: obj };
     if (freshToken) {
-      response.token   = freshToken;
-      response.message = 'Congratulations! You are now verified as a landlord. Please use the new token.';
+      const updatedUser = await User.findById(req.user.id);
+      response.token = freshToken;
+      response.message = 'You are now a landlord. Save the new token.';
+      response.user = updatedUser.toJSON();
     }
 
     res.json(response);
-
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-// @desc  Admin — get all verifications
-// @route GET /api/nin-verification/admin/all
-// @access Private/Admin
+// GET /api/nin-verification/admin/all
 exports.getAllVerifications = async (req, res) => {
   try {
-    const filter = {};
-    if (req.query.status) filter.status = req.query.status;
-
+    const filter = req.query.status ? { status: req.query.status } : {};
     const verifications = await NinVerification.find(filter)
-      .populate('user', 'firstName lastName email phone role')
+      .populate('user', 'firstName lastName email phone role verifyOwner')
       .sort({ createdAt: -1 });
-
     res.json({ success: true, count: verifications.length, verifications });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-// @desc  Admin — approve or reject
-// @route PATCH /api/nin-verification/admin/:id/review
-// @access Private/Admin
+// PATCH /api/nin-verification/admin/:id/review
 exports.reviewVerification = async (req, res) => {
   try {
     const { action, adminNote } = req.body;
-
-    if (!['approve', 'reject'].includes(action)) {
+    if (!['approve', 'reject'].includes(action))
       return res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" });
-    }
 
     const verification = await NinVerification.findById(req.params.id).populate('user');
     if (!verification) return res.status(404).json({ success: false, message: 'Verification not found' });
+    if (verification.status === 'verified') return res.status(400).json({ success: false, message: 'Already approved' });
 
-    if (verification.status === 'verified') {
-      return res.status(400).json({ success: false, message: 'Already approved' });
-    }
+    const now = new Date().toISOString();
 
     if (action === 'approve') {
-      verification.status       = 'verified';
+      verification.status = 'verified';
       verification.roleUpgraded = true;
-      verification.adminNote    = adminNote || '';
+      verification.adminNote = adminNote || '';
       await verification.save();
-      await User.findByIdAndUpdate(verification.user._id, { role: 'landlord' });
-      return res.json({ success: true, message: 'User approved as landlord', verification });
+      await User.findByIdAndUpdate(verification.user._id, {
+        role: 'landlord',
+        'verifyOwner.status': 'verified',
+        'verifyOwner.verifiedAt': now
+      });
+      return res.json({ success: true, message: 'User approved as landlord' });
     }
 
-    verification.status    = 'failed';
+    verification.status = 'failed';
     verification.adminNote = adminNote || 'Rejected by admin';
     await verification.save();
+    await User.findByIdAndUpdate(verification.user._id, { 'verifyOwner.status': 'failed' });
 
-    res.json({ success: true, message: 'Verification rejected', verification });
-
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+    res.json({ success: true, message: 'Verification rejected' });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
-
-function _safeVerification(doc) {
-  const obj = doc.toObject ? doc.toObject() : { ...doc };
-  delete obj.nin;
-  return obj;
-}

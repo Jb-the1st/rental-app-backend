@@ -5,134 +5,91 @@ const UserSchema = new mongoose.Schema({
   firstName: { type: String, required: [true, 'First name is required'], trim: true },
   lastName:  { type: String, required: [true, 'Last name is required'],  trim: true },
   company:   { type: String, default: '' },
+
   email: {
-    type: String, required: [true, 'Email is required'],
-    unique: true, lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email'],
-  },
- phone: {
-  type: String,
-  required: [true, 'Phone number is required'],
-  trim: true,
-  unique: true,
-  match: [/^0(?:70|80|81|90|91)\d{8}$/, 'Please enter a valid Nigerian phone number'],
-},
-  password: {
-    type: String, required: [true, 'Password is required'], minlength: 8, select: false,
-    match: [/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, 'Password must include uppercase, lowercase, number, and special character'],
-  },
-  role: { type: String, enum: ['user', 'owner', 'admin'], default: 'user' },
-
-  // NIN
-  NIN: {
-    type: String, sparse: true,
-    validate: {
-      validator: (v) => !v || /^\d{11}$/.test(v),
-      message: 'NIN must be exactly 11 digits',
-    },
-  },
-  ninVerified: { type: Boolean, default: false },
-  ninVerificationData: {
-    fullName: String, dateOfBirth: Date, gender: String, verifiedAt: Date,
+    type: String,
+    required: [true, 'Email is required'],
+    unique: true,
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email']
   },
 
-  // Profile
-  imageUrl:    { type: String, default: '' },
-  dateOfBirth: { type: Date },
-  address: {
-    street: String, city: String, state: String, country: String, zipCode: String,
-  },
+  // String not Number — matches frontend interface
+  phone: { type: String, required: [true, 'Phone number is required'] },
 
-  // Verification
+  password: { type: String, required: [true, 'Password is required'], minlength: 6, select: false },
+
+  role: { type: String, enum: ['tenant', 'landlord', 'admin'], default: 'tenant' },
+
+  imageUrl: { type: String, default: '' },
+
+  // ── Email verification ──────────────────────────────────────────────────
   isEmailVerified:          { type: Boolean, default: false },
-  isPhoneVerified:          { type: Boolean, default: false },
-  emailVerificationToken:   { type: String,  select: false },
-  emailVerificationExpires: { type: Date,    select: false },
-  phoneVerificationCode:    { type: String,  select: false },
-  phoneVerificationExpires: { type: Date,    select: false },
+  emailVerificationToken:   { type: String },
+  emailVerificationExpires: { type: Date },
 
-  // Landlord Verification
-  landlordVerification: {
-    status: { type: String, enum: ['none', 'pending', 'approved', 'rejected'], default: 'none' },
-    submittedAt:  Date,
-    reviewedAt:   Date,
-    reviewedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    rejectionReason: String,
-
-    documents: [{
-      type: {
-        type: String,
-        enum: ['proof_of_ownership', 'government_id', 'utility_bill', 'bank_statement', 'other'],
-      },
-      url:       String, // Cloudinary URL
-      publicId:  String, // Cloudinary public_id (for deletion)
-      uploadedAt: { type: Date, default: Date.now },
-      verified:   { type: Boolean, default: false },
-    }],
-
-    businessName:               String,
-    businessRegistrationNumber: String,
-    taxId:                      String,
-    yearsOfExperience:          Number,
-    numberOfProperties:         Number,
-    references: [{ name: String, phone: String, relationship: String }],
-  },
-
-  // Security
-  lastLogin:          Date,
-  loginAttempts:      { type: Number, default: 0 },
-  lockUntil:          Date,
-  twoFactorEnabled:   { type: Boolean, default: false },
-  twoFactorSecret:    { type: String, select: false },
+  // ── verifyOwner — embedded landlord verification data ───────────────────
+  // Matches the frontend VerifyOwner interface exactly.
+  // Populated when the user submits their NIN verification form.
+  // The NinVerification collection still stores the raw NIN securely;
+  // this embedded object stores only the safe display fields.
+  verifyOwner: {
+    NIN: {
+      type: Number,
+      default: undefined
+      // NOTE: stored as Number to match frontend interface (NIN?: number)
+      // Not returned to client — stripped in toJSON below
+    },
+    firstName: { type: String, default: '' },
+    lastName:  { type: String, default: '' },
+    DoB:       { type: String, default: '' }, // "YYYY-MM-DD" string — matches frontend
+    address:   { type: String, default: '' },
+    status: {
+      type: String,
+      enum: ['', 'pending', 'processing', 'verified', 'failed'],
+      default: ''
+    },
+    verifiedAt: { type: String, default: '' } // ISO string — matches frontend
+  }
 
 }, { timestamps: true });
 
-// ── Pre-save: hash password ────────────────────────────────────────────────
-// ✅ async hook WITHOUT next() — required for Mongoose 7+
-UserSchema.pre('save', async function () {
-  if (!this.isModified('password')) return;
+// ── Hooks ────────────────────────────────────────────────────────────────────
+UserSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
-// ── Methods ───────────────────────────────────────────────────────────────
+// ── Methods ──────────────────────────────────────────────────────────────────
 UserSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
-
-UserSchema.methods.isLocked = function () {
-  return !!(this.lockUntil && this.lockUntil > Date.now());
-};
-
-UserSchema.methods.incLoginAttempts = function () {
-  if (this.lockUntil && this.lockUntil < Date.now()) {
-    return this.updateOne({ $set: { loginAttempts: 1 }, $unset: { lockUntil: 1 } });
-  }
-  const updates = { $inc: { loginAttempts: 1 } };
-  if (this.loginAttempts + 1 >= 5 && !this.isLocked()) {
-    updates.$set = { lockUntil: Date.now() + 2 * 60 * 60 * 1000 }; // 2 hours
-  }
-  return this.updateOne(updates);
-};
-
-UserSchema.methods.resetLoginAttempts = function () {
-  return this.updateOne({
-    $set: { loginAttempts: 0, lastLogin: Date.now() },
-    $unset: { lockUntil: 1 },
-  });
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
 UserSchema.methods.toJSON = function () {
   const obj = this.toObject();
+
+  // Map _id → id (frontend expects "id")
   obj.id = obj._id;
   delete obj._id;
   delete obj.__v;
+
+  // Never expose these to client
   delete obj.password;
   delete obj.emailVerificationToken;
   delete obj.emailVerificationExpires;
-  delete obj.phoneVerificationCode;
-  delete obj.phoneVerificationExpires;
-  delete obj.twoFactorSecret;
+
+  // Strip the raw NIN from verifyOwner before sending to client
+  if (obj.verifyOwner) {
+    delete obj.verifyOwner.NIN;
+  }
+
+  // phone comes back as string (already stored as String now)
+  if (obj.phone !== undefined) {
+    obj.phone = String(obj.phone);
+  }
+
   return obj;
 };
 
