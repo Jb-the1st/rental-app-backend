@@ -36,7 +36,7 @@ const { protect, authorize } = require('../middleware/auth.middleware');
 router.get('/',getUsers);
 router.get('/:id', protect, getUser);
 router.put('/:id', protect, updateUser);
-router.delete('/:id', protect, authorize('admin'), deleteUser);
+router.delete('/:id', protect, deleteUser);
 router.patch('/:id/toggle-role', protect, authorize('admin'), toggleRole);
 
 // router.patch('/:id/switch-to-landlord', protect, switchToLandlord);
