@@ -19,7 +19,7 @@ const UserSchema = new mongoose.Schema({
 
   password: { type: String, required: [true, 'Password is required'], minlength: 6, select: false },
 
-  role: { type: String, enum: ['tenant', 'landlord', 'admin'], default: 'tenant' },
+  role: { type: String, enum: ['user', 'owner', 'admin'], default: 'user' },
 
   imageUrl: { type: String, default: '' },
 
