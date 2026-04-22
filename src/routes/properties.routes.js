@@ -12,8 +12,8 @@ router.get('/:id', getProperty);
 
 // upload.array('images', 10) accepts up to 10 files under field name "images"
 // Also still works if frontend sends a single file under "image"
-router.post('/', protect, requireEmailVerified, upload.array('images', 10), createProperty);
-router.put('/:id', protect, requireEmailVerified, upload.array('images', 10), updateProperty);
+router.post('/', protect, upload.array('images', 10), createProperty);
+router.put('/:id', protect, upload.array('images', 10), updateProperty);
 router.delete('/:id', protect, deleteProperty);
 
 module.exports = router;
