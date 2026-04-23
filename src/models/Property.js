@@ -15,13 +15,13 @@ const PropertySchema = new mongoose.Schema({
   type: {
     type: String,
     required: [true, 'Property type is required'],
-    enum: ['apartment', 'house', 'condo', 'studio', 'townhouse']
+    enum: ['apartment', 'building', 'land']
   },
 
   // ── NEW fields expected by frontend ──────────────────────────────────────
   listingType: {
     type: String,
-    enum: ['rent', 'sale', 'shortlet', ''],
+    enum: ['rental', 'sale', ''],
     default: ''
     // frontend: listingType: string (required in interface)
   },
