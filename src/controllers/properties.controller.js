@@ -97,7 +97,7 @@ exports.createProperty = async (req, res) => {
     res.status(201).json({ success: true, property: property.toJSON() });
   } catch (error) {
     console.error('createProperty error:', error);
-    res.status(500).json({ success: false, message: `Error creating property: ${JSON.stringify(req.body)}` });
+    res.status(500).json({ success: false, message: ` ${req.body.price}, ${req.body.title}, ${req.body.description}, ${req.body.country}, ${req.body.city}, ${req.body.state}, ${req.body.type}, ${req.body.imageUrls}, ${req.body.listingType},  ${req.body.duration}, ` });
   }
 };
 
