@@ -86,18 +86,39 @@ exports.createProperty = async (req, res) => {
   try {
     req.body.owner = req.user._id;
 
+    // DEBUG — log exactly what the frontend sent so we can see image format
+    console.log('=== createProperty DEBUG ===');
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('req.file:', req.file ? { fieldname: req.file.fieldname, mimetype: req.file.mimetype, size: req.file.size } : 'NONE');
+    console.log('req.files:', req.files ? req.files.map(f => ({ fieldname: f.fieldname, mimetype: f.mimetype, size: f.size })) : 'NONE');
+    console.log('req.body keys:', Object.keys(req.body));
+    console.log('req.body.imageUrl (first 80 chars):', req.body.imageUrl ? req.body.imageUrl.substring(0, 80) : 'NONE');
+    console.log('req.body.imageUrls:', req.body.imageUrls ? (Array.isArray(req.body.imageUrls) ? req.body.imageUrls.length + ' items' : req.body.imageUrls.substring(0,80)) : 'NONE');
+    console.log('============================');
+
     const imageUrls = await resolveImageUrls(req);
     if (imageUrls.length > 0) req.body.imageUrls = imageUrls;
 
-    // Clean up old single-field if sent
+    // Remove raw base64 / old field before saving
     delete req.body.imageUrl;
 
     const property = await Property.create(req.body);
     await property.populate('owner', 'firstName lastName email phone imageUrl');
     res.status(201).json({ success: true, property: property.toJSON() });
   } catch (error) {
-    console.error('createProperty error:', error);
-    res.status(500).json({ success: false, message: ` ${req.body.price}, ${req.body.title}, ${req.body.description}, ${req.body.country}, ${req.body.city}, ${req.body.state}, ${req.body.type}, ${req.body.imageUrls}, ${req.body.listingType},  ${req.body.duration}, ` });
+    console.error('createProperty error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      debug: {
+        contentType: req.headers['content-type'],
+        hasFile: !!req.file,
+        hasFiles: !!(req.files && req.files.length),
+        bodyKeys: Object.keys(req.body),
+        imageUrlPresent: !!req.body.imageUrl,
+        imageUrlsPresent: !!req.body.imageUrls
+      }
+    });
   }
 };
 
