@@ -39,10 +39,18 @@ PropertySchema.methods.toJSON = function () {
   delete obj._id;
   delete obj.__v;
 
-  // Frontend interface: userId: number  (not owner object)
+  // userId — flat ID the frontend interface expects
+  // owner  — keep the populated object so property cards can display owner info
   if (obj.owner) {
-    obj.userId = obj.owner._id || obj.owner;
-    delete obj.owner;
+    if (obj.owner._id) {
+      // owner is populated (has full object)
+      obj.userId = obj.owner._id;
+      // keep obj.owner intact so frontend can read owner.firstName etc.
+    } else {
+      // owner is just an ObjectId (not populated)
+      obj.userId = obj.owner;
+      delete obj.owner;
+    }
   }
 
   // Back-compat: old docs may have imageUrl (string) — wrap into array
