@@ -1,42 +1,33 @@
 const mongoose = require('mongoose');
 
 const PropertySchema = new mongoose.Schema({
-  title:       { type: String, required: [true, 'Title is required'],       trim: true },
-  price:       { type: Number, required: [true, 'Price is required'],       min: 0 },
+  title:       { type: String, required: [true, 'Title is required'], trim: true },
+  price:       { type: Number, required: [true, 'Price is required'], min: 0 },
   description: { type: String, required: [true, 'Description is required'] },
   country:     { type: String, required: [true, 'Country is required'] },
   state:       { type: String, required: [true, 'State is required'] },
   city:        { type: String, required: [true, 'City is required'] },
 
-  // imageUrls is now an ARRAY — matches frontend interface (imageUrls?: string[])
-  // Old single imageUrl field is kept as a fallback for existing documents
   imageUrls: { type: [String], default: [] },
 
   type: {
     type: String,
     required: [true, 'Property type is required'],
-    enum: ['apartment', 'building', 'land']
+    // open string — no enum so frontend can send any type value freely
   },
 
-  // ── NEW fields expected by frontend ──────────────────────────────────────
   listingType: {
     type: String,
-    enum: ['rental', 'sale', ''],
     default: ''
-    // frontend: listingType: string (required in interface)
   },
 
   duration: {
     type: String,
     default: ''
-    // frontend: duration?: string (optional — e.g. "6 months", "1 year")
   },
 
-  owner: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
+  // stored as ObjectId ref internally
+  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
   isAvailable: { type: Boolean, default: true }
 
@@ -48,16 +39,17 @@ PropertySchema.methods.toJSON = function () {
   delete obj._id;
   delete obj.__v;
 
-  // Back-compat: if old document has imageUrl (string) but no imageUrls array,
-  // wrap it so the frontend always gets imageUrls as an array
-  if (!obj.imageUrls || obj.imageUrls.length === 0) {
-    if (obj.imageUrl) {
-      obj.imageUrls = [obj.imageUrl];
-    } else {
-      obj.imageUrls = [];
-    }
+  // Frontend interface: userId: number  (not owner object)
+  if (obj.owner) {
+    obj.userId = obj.owner._id || obj.owner;
+    delete obj.owner;
   }
-  delete obj.imageUrl; // never send the old single field
+
+  // Back-compat: old docs may have imageUrl (string) — wrap into array
+  if (!obj.imageUrls || obj.imageUrls.length === 0) {
+    obj.imageUrls = obj.imageUrl ? [obj.imageUrl] : [];
+  }
+  delete obj.imageUrl;
 
   return obj;
 };

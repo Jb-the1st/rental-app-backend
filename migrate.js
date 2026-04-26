@@ -1,102 +1,59 @@
 /**
- * migrate.js — One-time migration script
- *
- * Run ONCE after deploying the new models:
+ * migrate.js — Run once after deploying updated models
  *   node migrate.js
- *
- * Safe to run multiple times — all operations are idempotent.
- *
- * What it does:
- *   1. Users   — convert phone from Number → String
- *   2. Users   — initialise empty verifyOwner on users that don't have it
- *   3. Properties — migrate imageUrl (string) → imageUrls (array)
- *   4. Properties — add missing listingType and duration fields
- *   5. Bookings   — add missing status field defaulting to "pending"
+ * Idempotent — safe to run multiple times.
  */
-
 require('dotenv').config();
 const mongoose = require('mongoose');
 
 const run = async () => {
   await mongoose.connect(process.env.MONGODB_URI);
-  console.log('✅ Connected to MongoDB');
-
+  console.log('✅ Connected to MongoDB\n');
   const db = mongoose.connection.db;
 
-  // ── 1. Users: phone Number → String ──────────────────────────────────────
-  console.log('\n📋 Migrating users.phone Number → String...');
+  // ── Users ─────────────────────────────────────────────────────────────────
+  console.log('👤 Migrating users...');
   const users = await db.collection('users').find({}).toArray();
-  let phoneFixed = 0;
+  let phoneFixed = 0, roleFixed = 0, verifyOwnerAdded = 0;
   for (const user of users) {
     const updates = {};
-
-    // Fix phone type
-    if (typeof user.phone === 'number') {
-      updates.phone = String(user.phone);
-      phoneFixed++;
-    }
-
-    // Initialise verifyOwner if missing
+    if (typeof user.phone === 'number')  { updates.phone = String(user.phone); phoneFixed++; }
+    if (user.role === 'tenant')   { updates.role = 'user';  roleFixed++; }
+    if (user.role === 'landlord') { updates.role = 'owner'; roleFixed++; }
     if (!user.verifyOwner) {
-      updates.verifyOwner = {
-        NIN: undefined,
-        firstName: '',
-        lastName: '',
-        DoB: '',
-        address: '',
-        status: '',
-        verifiedAt: ''
-      };
+      updates.verifyOwner = { firstName:'', lastName:'', DoB:'', address:'', status:'', verifiedAt:'' };
+      verifyOwnerAdded++;
     }
-
-    if (Object.keys(updates).length > 0) {
+    if (Object.keys(updates).length > 0)
       await db.collection('users').updateOne({ _id: user._id }, { $set: updates });
-    }
   }
-  console.log(`   ✅ ${phoneFixed} users had phone converted to String`);
-  console.log(`   ✅ verifyOwner initialised on users that were missing it`);
+  console.log(`   ✅ ${phoneFixed} phones → String`);
+  console.log(`   ✅ ${roleFixed} roles renamed (tenant→user, landlord→owner)`);
+  console.log(`   ✅ ${verifyOwnerAdded} users got verifyOwner`);
 
-  // ── 2. Properties: imageUrl → imageUrls array ─────────────────────────────
-  console.log('\n🏠 Migrating properties.imageUrl → imageUrls array...');
-  const properties = await db.collection('properties').find({}).toArray();
-  let propFixed = 0;
-  for (const prop of properties) {
+  // ── Properties ────────────────────────────────────────────────────────────
+  console.log('\n🏠 Migrating properties...');
+  const props = await db.collection('properties').find({}).toArray();
+  let imageFixed = 0;
+  for (const prop of props) {
     const updates = {};
-
-    // If imageUrls array is missing or empty but imageUrl string exists, migrate it
-    if ((!prop.imageUrls || prop.imageUrls.length === 0) && prop.imageUrl) {
-      updates.imageUrls = [prop.imageUrl];
-      propFixed++;
-    } else if (!prop.imageUrls) {
-      updates.imageUrls = [];
-    }
-
-    // Add missing fields
+    if ((!prop.imageUrls || prop.imageUrls.length === 0) && prop.imageUrl) { updates.imageUrls = [prop.imageUrl]; imageFixed++; }
+    else if (!prop.imageUrls) { updates.imageUrls = []; }
     if (prop.listingType === undefined) updates.listingType = '';
-    if (prop.duration === undefined)    updates.duration = '';
-
-    if (Object.keys(updates).length > 0) {
+    if (prop.duration    === undefined) updates.duration    = '';
+    if (Object.keys(updates).length > 0)
       await db.collection('properties').updateOne({ _id: prop._id }, { $set: updates });
-    }
   }
-  console.log(`   ✅ ${propFixed} properties had imageUrl migrated to imageUrls array`);
-  console.log(`   ✅ listingType and duration initialised where missing`);
+  console.log(`   ✅ ${imageFixed} imageUrl → imageUrls array`);
 
-  // ── 3. Bookings: add missing status field ─────────────────────────────────
-  console.log('\n📅 Migrating bookings — adding status field...');
-  const bookingResult = await db.collection('bookings').updateMany(
-    { status: { $exists: false } },
-    { $set: { status: 'pending' } }
-  );
-  console.log(`   ✅ ${bookingResult.modifiedCount} bookings updated with status: "pending"`);
+  // ── Bookings ──────────────────────────────────────────────────────────────
+  console.log('\n📅 Migrating bookings...');
+  const r = await db.collection('bookings').updateMany({ status: { $exists: false } }, { $set: { status: 'pending' } });
+  console.log(`   ✅ ${r.modifiedCount} bookings got status: "pending"`);
 
-  // ── Done ──────────────────────────────────────────────────────────────────
-  console.log('\n🎉 Migration complete!\n');
+  console.log('\n🎉 Done!\n');
   await mongoose.disconnect();
   process.exit(0);
 };
 
-run().catch(err => {
-  console.error('❌ Migration failed:', err);
-  process.exit(1);
-});
+run().catch(err => { console.error('❌', err); process.exit(1); });

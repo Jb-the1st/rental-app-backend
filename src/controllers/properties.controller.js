@@ -1,9 +1,8 @@
 const Property = require('../models/Property');
 const cloudinary = require('../config/cloudinary');
 
-// Uploads one image to Cloudinary — handles buffer (multipart) or base64 string
 const uploadOneToCloudinary = async (file) => {
-  if (file.buffer) {
+  if (file && file.buffer) {
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         { folder: 'rental-app/properties' },
@@ -21,15 +20,9 @@ const uploadOneToCloudinary = async (file) => {
   return null;
 };
 
-// Resolves imageUrls from request:
-//   - req.files (multiple file upload — multer array)
-//   - req.file  (single file upload — multer single)
-//   - req.body.imageUrls (array of base64 strings or already-uploaded URLs)
-//   - req.body.imageUrl  (single base64 — back-compat)
 const resolveImageUrls = async (req) => {
   const urls = [];
 
-  // Multiple files via multipart
   if (req.files && req.files.length > 0) {
     for (const file of req.files) {
       const url = await uploadOneToCloudinary(file);
@@ -38,27 +31,24 @@ const resolveImageUrls = async (req) => {
     return urls;
   }
 
-  // Single file via multipart
   if (req.file) {
     const url = await uploadOneToCloudinary(req.file);
     if (url) urls.push(url);
     return urls;
   }
 
-  // Array of base64 or URLs in JSON body
   if (req.body.imageUrls && Array.isArray(req.body.imageUrls)) {
     for (const item of req.body.imageUrls) {
       if (item.startsWith('data:')) {
         const url = await uploadOneToCloudinary(item);
         if (url) urls.push(url);
       } else if (item.startsWith('http')) {
-        urls.push(item); // already a Cloudinary URL
+        urls.push(item);
       }
     }
     return urls;
   }
 
-  // Single base64 in body (back-compat with old imageUrl field)
   if (req.body.imageUrl && req.body.imageUrl.startsWith('data:')) {
     const url = await uploadOneToCloudinary(req.body.imageUrl);
     if (url) urls.push(url);
@@ -84,41 +74,27 @@ exports.getProperty = async (req, res) => {
 
 exports.createProperty = async (req, res) => {
   try {
-    req.body.owner = req.user._id;
-
-    // DEBUG — log exactly what the frontend sent so we can see image format
-    console.log('=== createProperty DEBUG ===');
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('req.file:', req.file ? { fieldname: req.file.fieldname, mimetype: req.file.mimetype, size: req.file.size } : 'NONE');
-    console.log('req.files:', req.files ? req.files.map(f => ({ fieldname: f.fieldname, mimetype: f.mimetype, size: f.size })) : 'NONE');
-    console.log('req.body keys:', Object.keys(req.body));
-    console.log('req.body.imageUrl (first 80 chars):', req.body.imageUrl ? req.body.imageUrl.substring(0, 80) : 'NONE');
-    console.log('req.body.imageUrls:', req.body.imageUrls ? (Array.isArray(req.body.imageUrls) ? req.body.imageUrls.length + ' items' : req.body.imageUrls.substring(0,80)) : 'NONE');
-    console.log('============================');
-
     const imageUrls = await resolveImageUrls(req);
-    if (imageUrls.length > 0) req.body.imageUrls = imageUrls;
 
-    // Remove raw base64 / old field before saving
-    delete req.body.imageUrl;
+    const property = await Property.create({
+      title:       req.body.title,
+      price:       req.body.price,
+      description: req.body.description,
+      country:     req.body.country,
+      state:       req.body.state,
+      city:        req.body.city,
+      type:        req.body.type,
+      listingType: req.body.listingType || '',
+      duration:    req.body.duration    || '',
+      isAvailable: req.body.isAvailable !== undefined ? req.body.isAvailable : true,
+      imageUrls:   imageUrls,
+      owner:       req.user._id   // always from auth token
+    });
 
-    const property = await Property.create(req.body);
     await property.populate('owner', 'firstName lastName email phone imageUrl');
     res.status(201).json({ success: true, property: property.toJSON() });
   } catch (error) {
-    console.error('createProperty error:', error.message);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-      debug: {
-        contentType: req.headers['content-type'],
-        hasFile: !!req.file,
-        hasFiles: !!(req.files && req.files.length),
-        bodyKeys: Object.keys(req.body),
-        imageUrlPresent: !!req.body.imageUrl,
-        imageUrlsPresent: !!req.body.imageUrls
-      }
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -130,16 +106,16 @@ exports.updateProperty = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
 
     const imageUrls = await resolveImageUrls(req);
-    if (imageUrls.length > 0) req.body.imageUrls = imageUrls;
-    delete req.body.imageUrl;
+    const update = { ...req.body };
+    delete update.owner;      // never allow owner change
+    delete update.userId;     // frontend field — ignore
+    delete update.imageUrl;   // old field — ignore
+    if (imageUrls.length > 0) update.imageUrls = imageUrls;
 
-    property = await Property.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+    property = await Property.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
       .populate('owner', 'firstName lastName email phone imageUrl');
     res.json({ success: true, property: property.toJSON() });
-  } catch (error) {
-    console.error('updateProperty error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
 exports.deleteProperty = async (req, res) => {
@@ -155,7 +131,9 @@ exports.deleteProperty = async (req, res) => {
 
 exports.getPropertiesByOwner = async (req, res) => {
   try {
-    const properties = await Property.find({ owner: req.params.userId }).populate('owner', 'firstName lastName email phone imageUrl');
+    // Frontend sends userId — query by owner field
+    const properties = await Property.find({ owner: req.params.userId })
+      .populate('owner', 'firstName lastName email phone imageUrl');
     res.json({ success: true, count: properties.length, properties: properties.map(p => p.toJSON()) });
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
