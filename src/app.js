@@ -17,7 +17,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://axterra.vercel.app/',
+    'https://axterra.vercel.app',
     'https://your-frontend-app.netlify.app'
   ],
   credentials: true,
