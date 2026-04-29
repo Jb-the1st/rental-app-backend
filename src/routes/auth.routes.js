@@ -24,8 +24,8 @@ router.post('/logout', protect, logout);
 // Email verification — all three now require the user to be logged in
 // The flow is: login → go to profile → click "Verify Email" → OTP sent → enter OTP
 router.post('/request-email-otp', protect, requestEmailOTP); // NEW — triggers OTP send
-router.post('/verify-email', protect, verifyEmail);          // CHANGED — now protected
-router.post('/resend-otp', protect, resendOTP);              // CHANGED — now protected
+router.post('/verify-email', verifyEmail);          // CHANGED — now protected
+router.post('/resend-otp', resendOTP);              // CHANGED — now protected
 
 // router.post('/verify-phone', protect, verifyPhone);
 // ↑ Phone verification is not part of the current flow — kept commented out
