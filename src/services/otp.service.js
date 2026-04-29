@@ -2,9 +2,12 @@ const speakeasy = require('speakeasy');
 const nodemailer = require('nodemailer');
 const twilio = require('twilio');
 
-// Email transporter (using Gmail - change for production)
-const emailTransporter = nodemailer.createTransport({
-  service: 'gmail',
+// Email transporter
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
+  family: 4,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD
@@ -24,7 +27,7 @@ exports.generateOTP = () => {
     secret: process.env.OTP_SECRET || 'rental-app-secret',
     encoding: 'base32',
     digits: 6,
-    step: 300 // 5 minutes validity
+    step: 300
   });
 };
 
@@ -38,7 +41,7 @@ exports.verifyOTP = (token, code) => {
     token: code,
     digits: 6,
     step: 300,
-    window: 1 // Allow 1 step before/after
+    window: 1
   });
 };
 
@@ -54,18 +57,18 @@ exports.sendEmailOTP = async (email, otp, firstName) => {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">Email Verification</h2>
         <p>Hi ${firstName},</p>
-        <p>Thank you for registering with Rental App. Please use the code below to verify your email:</p>
+        <p>Thank you for registering with Axterra. Please use the code below to verify your email:</p>
         <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
           <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
         </div>
-        <p style="color: #666;">This code will expire in 5 minutes.</p>
+        <p style="color: #666;">This code will expire in 10 minutes.</p>
         <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
       </div>
     `
   };
 
   try {
-    await emailTransporter.sendMail(mailOptions);
+    await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
     console.error('Email OTP Error:', error);
