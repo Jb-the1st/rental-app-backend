@@ -1,6 +1,7 @@
 const speakeasy = require('speakeasy');
 // const { Resend } = require('resend');
 const twilio = require('twilio');
+const nodemailer = require('nodemailer');
 
 // Resend client
 // const resend = new Resend(process.env.RESEND_API_KEY);
