@@ -4,16 +4,17 @@ const twilio = require('twilio');
 
 // Email transporter
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
+  host: '74.125.133.108',  // Gmail SMTP IPv4 address directly — bypasses IPv6 DNS resolution
   port: 587,
   secure: false,
-  family: 4,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD
+  },
+  tls: {
+    servername: 'smtp.gmail.com'  // still validates against Gmail's SSL cert
   }
 });
-
 // Twilio client (for SMS)
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
