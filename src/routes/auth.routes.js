@@ -23,7 +23,7 @@ router.post('/logout', protect, logout);
 
 // Email verification — all three now require the user to be logged in
 // The flow is: login → go to profile → click "Verify Email" → OTP sent → enter OTP
-router.post('/request-email-otp', protect, requestEmailOTP); // NEW — triggers OTP send
+router.post('/request-email-otp', requestEmailOTP); // NEW — triggers OTP send
 router.post('/verify-email', verifyEmail);          // CHANGED — now protected
 router.post('/resend-otp', resendOTP);              // CHANGED — now protected
 

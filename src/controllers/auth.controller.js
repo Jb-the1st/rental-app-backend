@@ -248,32 +248,21 @@ exports.logout = async (req, res) => {
 // @access Private
 exports.requestEmailOTP = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
- 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
- 
-    if (user.isEmailVerified) {
-      return res.status(400).json({ success: false, message: 'Email is already verified' });
-    }
- 
-    // Generate OTP and save to user
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.isEmailVerified) return res.status(400).json({ success: false, message: 'Email is already verified' });
+
     const otp = otpService.generateOTP();
-    user.emailVerificationToken  = otp;
-    user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.emailVerificationToken = otp;
+    user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
- 
-    // Send OTP email
     await otpService.sendEmailOTP(user.email, otp, user.firstName);
- 
-    res.json({
-      success: true,
-      message: 'Verification code sent to your email address'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+
+    res.json({ success: true, message: 'Verification code sent to your email address' });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
 // @desc  Resend email OTP — in case it expired
@@ -281,26 +270,20 @@ exports.requestEmailOTP = async (req, res) => {
 // @access Private
 exports.resendOTP = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
- 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
- 
-    if (user.isEmailVerified) {
-      return res.status(400).json({ success: false, message: 'Email is already verified' });
-    }
- 
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.isEmailVerified) return res.status(400).json({ success: false, message: 'Email already verified' });
+
     const otp = otpService.generateOTP();
-    user.emailVerificationToken   = otp;
+    user.emailVerificationToken = otp;
     user.emailVerificationExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
- 
     await otpService.sendEmailOTP(user.email, otp, user.firstName);
- 
+
     res.json({ success: true, message: 'Verification code resent to your email address' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
  
