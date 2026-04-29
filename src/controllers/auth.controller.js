@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const { generateToken } = require('../utils/jwt');
 const otpService = require('../services/otp.service');
+const TempOtp = require('../models/TempOtp');  // ← add this
 
 // @desc    Register user — only allowed after email is verified via OTP
 // @route   POST /api/auth/register
