@@ -3,9 +3,13 @@ const Brevo = require('@getbrevo/brevo');
 const twilio = require('twilio');
 
 // Brevo API client
-const brevoClient = Brevo.ApiClient.instance;
-brevoClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
-const transactionalEmailApi = new Brevo.TransactionalEmailsApi();
+// const brevoClient = Brevo.ApiClient.instance;
+// brevoClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+// const transactionalEmailApi = new Brevo.TransactionalEmailsApi();
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+defaultClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+const transactionalEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
 // Twilio client (for SMS)
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
