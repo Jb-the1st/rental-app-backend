@@ -42,7 +42,7 @@ exports.verifyOTP = (token, code) => {
 exports.sendEmailOTP = async (email, otp, firstName) => {
   try {
     await resend.emails.send({
-      from: 'noreply@Axterra.com',  // ← change to your verified domain
+      from: 'onboarding@resend.dev',  // ← change to your verified domain
                                         // or use 'onboarding@resend.dev' for testing
       to: email,
       subject: 'Verify Your Email - Axterra App',
