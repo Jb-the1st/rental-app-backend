@@ -1,19 +1,12 @@
 const speakeasy = require('speakeasy');
-// const { Resend } = require('resend');
+const Brevo = require('@getbrevo/brevo');
 const twilio = require('twilio');
-const nodemailer = require('nodemailer');
 
-// Resend client
-// const resend = new Resend(process.env.RESEND_API_KEY);
-const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.BREVO_SMTP_USER,
-    pass: process.env.BREVO_SMTP_PASS
-  }
-});
+// Brevo API client
+const brevoClient = Brevo.ApiClient.instance;
+brevoClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+const transactionalEmailApi = new Brevo.TransactionalEmailsApi();
+
 // Twilio client (for SMS)
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -50,24 +43,28 @@ exports.verifyOTP = (token, code) => {
  */
 exports.sendEmailOTP = async (email, otp, firstName) => {
   try {
-    await transporter.sendMail({
-      from: 'noreply@axterra.com',  // ← change to your verified domain
-                                        // or use 'onboarding@resend.dev' for testing
-      to: email,
-      subject: 'Verify Your Email - Axterra App',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Email Verification</h2>
-          <p>Hi ${firstName},</p>
-          <p>Please use the code below to verify your email:</p>
-          <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-            <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
-          </div>
-          <p style="color: #666;">This code will expire in 10 minutes.</p>
-          <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+    const sendSmtpEmail = new Brevo.SendSmtpEmail();
+
+    sendSmtpEmail.subject = 'Verify Your Email - Axterra App';
+    sendSmtpEmail.to = [{ email, name: firstName }];
+    sendSmtpEmail.sender = {
+      name: 'Axterra App',
+      email: process.env.BREVO_SENDER_EMAIL  // ← your verified sender email in Brevo
+    };
+    sendSmtpEmail.htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Email Verification</h2>
+        <p>Hi ${firstName},</p>
+        <p>Please use the code below to verify your email:</p>
+        <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+          <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
         </div>
-      `
-    });
+        <p style="color: #666;">This code will expire in 10 minutes.</p>
+        <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+      </div>
+    `;
+
+    await transactionalEmailApi.sendTransacEmail(sendSmtpEmail);
     return { success: true };
   } catch (error) {
     console.error('Email OTP Error:', error);
