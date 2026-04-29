@@ -1,10 +1,18 @@
 const speakeasy = require('speakeasy');
-const { Resend } = require('resend');
+// const { Resend } = require('resend');
 const twilio = require('twilio');
 
 // Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
-
+// const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.BREVO_SMTP_USER,
+    pass: process.env.BREVO_SMTP_PASS
+  }
+});
 // Twilio client (for SMS)
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -41,8 +49,8 @@ exports.verifyOTP = (token, code) => {
  */
 exports.sendEmailOTP = async (email, otp, firstName) => {
   try {
-    await resend.emails.send({
-      from: 'onboarding@resend.dev',  // ← change to your verified domain
+    await transporter.sendMail({
+      from: 'noreply@axterra.com',  // ← change to your verified domain
                                         // or use 'onboarding@resend.dev' for testing
       to: email,
       subject: 'Verify Your Email - Axterra App',
