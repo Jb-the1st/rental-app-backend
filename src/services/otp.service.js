@@ -1,20 +1,10 @@
 const speakeasy = require('speakeasy');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const twilio = require('twilio');
 
-// Email transporter
-const transporter = nodemailer.createTransport({
-  host: '74.125.133.108',  // Gmail SMTP IPv4 address directly — bypasses IPv6 DNS resolution
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  },
-  tls: {
-    servername: 'smtp.gmail.com'  // still validates against Gmail's SSL cert
-  }
-});
+// Resend client
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 // Twilio client (for SMS)
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -50,26 +40,25 @@ exports.verifyOTP = (token, code) => {
  * Send OTP via Email
  */
 exports.sendEmailOTP = async (email, otp, firstName) => {
-  const mailOptions = {
-    from: process.env.EMAIL_USER || 'noreply@rentalapp.com',
-    to: email,
-    subject: 'Verify Your Email - Rental App',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Email Verification</h2>
-        <p>Hi ${firstName},</p>
-        <p>Thank you for registering with Axterra. Please use the code below to verify your email:</p>
-        <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-          <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
-        </div>
-        <p style="color: #666;">This code will expire in 10 minutes.</p>
-        <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
-      </div>
-    `
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send({
+      from: 'noreply@Axterra.com',  // ← change to your verified domain
+                                        // or use 'onboarding@resend.dev' for testing
+      to: email,
+      subject: 'Verify Your Email - Axterra App',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Email Verification</h2>
+          <p>Hi ${firstName},</p>
+          <p>Please use the code below to verify your email:</p>
+          <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+            <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
+          </div>
+          <p style="color: #666;">This code will expire in 10 minutes.</p>
+          <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+        </div>
+      `
+    });
     return { success: true };
   } catch (error) {
     console.error('Email OTP Error:', error);

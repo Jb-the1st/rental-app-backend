@@ -29,7 +29,7 @@ exports.register = async (req, res) => {
       phone,
       password,
       company: company || '',
-      role: 'tenant',
+      role: 'owner',
       isEmailVerified: true  // already verified via OTP flow
     });
 
