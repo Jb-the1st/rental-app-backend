@@ -43,13 +43,13 @@ exports.verifyOTP = (token, code) => {
  */
 exports.sendEmailOTP = async (email, otp, firstName) => {
   try {
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
     sendSmtpEmail.subject = 'Verify Your Email - Axterra App';
     sendSmtpEmail.to = [{ email, name: firstName }];
     sendSmtpEmail.sender = {
       name: 'Axterra App',
-      email: process.env.BREVO_SENDER_EMAIL  // ← your verified sender email in Brevo
+      email: process.env.BREVO_SENDER_EMAIL
     };
     sendSmtpEmail.htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -83,7 +83,7 @@ exports.sendSMSOTP = async (phone, otp) => {
 
   try {
     await twilioClient.messages.create({
-      body: `Your Rental App verification code is: ${otp}. Valid for 5 minutes.`,
+      body: `Your Axterra App verification code is: ${otp}. Valid for 5 minutes.`,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: phone
     });
