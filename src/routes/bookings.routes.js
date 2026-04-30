@@ -12,7 +12,7 @@ const {
 const { protect, authorize }  = require('../middleware/auth.middleware');
 const requireEmailVerified     = require('../middleware/requireEmailVerified');
 
-router.get('/', protect, authorize('admin'), getBookings);
+router.get('/', protect, authorize('admin', 'owner'), getBookings);
 router.get('/my-bookings', protect, getMyBookings);
 
 // requireEmailVerified blocks unverified users with a clear message
