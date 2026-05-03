@@ -36,19 +36,37 @@ exports.getUser = async (req, res) => {
 // @access Private
 exports.updateUser = async (req, res) => {
   try {
-    // Don't allow updating password through this route
+    // Only the user themselves or an admin can update
+    if (req.params.id !== req.user._id.toString() && req.user.role !== 'admin')
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+
     delete req.body.password;
- 
+    delete req.body.role; // prevent role self-escalation
+
+    // Handle profile picture upload to Cloudinary
+    if (req.file) {
+      const cloudinary = require('../config/cloudinary');
+      const { Readable } = require('stream');
+
+      const cloudinaryUrl = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: 'rental-app/avatars' },
+          (error, result) => { if (error) return reject(error); resolve(result.secure_url); }
+        );
+        Readable.from(req.file.buffer).pipe(stream);
+      });
+
+      req.body.imageUrl = cloudinaryUrl;
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
- 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
- 
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
     res.json({ success: true, user: user.toJSON() });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

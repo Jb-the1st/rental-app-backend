@@ -32,7 +32,9 @@ const {
 } = require('../controllers/users.controller');
 
 const { protect, authorize } = require('../middleware/auth.middleware');
+const upload = require('../middleware/upload.middleware');
 
+router.put('/:id', protect, upload.single('image'), updateUser);
 router.get('/',getUsers);
 router.get('/:id', protect, getUser);
 router.put('/:id', protect, updateUser);

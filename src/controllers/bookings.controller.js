@@ -52,6 +52,38 @@ exports.updateBooking = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
+exports.updateBookingStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!['accepted', 'declined'].includes(status))
+      return res.status(400).json({ success: false, message: "status must be 'accepted' or 'declined'" });
+
+    const booking = await Booking.findById(req.params.id)
+      .populate('property');
+
+    if (!booking)
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    // Only the property owner or admin can accept/decline
+    if (
+      booking.property.owner.toString() !== req.user._id.toString() &&
+      req.user.role !== 'admin'
+    )
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+
+    booking.status = status;
+    await booking.save();
+
+    await booking.populate('user', 'firstName lastName email phone');
+    await booking.populate('property', 'title price city state');
+
+    res.json({ success: true, booking: booking.toJSON() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.deleteBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
