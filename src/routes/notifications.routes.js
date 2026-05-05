@@ -10,7 +10,7 @@ const {
 const { protect, authorize } = require('../middleware/auth.middleware');
 
 router.get('/',                       protect, getNotifications);
-router.post('/',                      protect, authorize('admin'), createNotification);
+router.post('/',                      protect, createNotification);
 router.patch('/read-all',             protect, markAllAsRead);
 router.patch('/:id/read',             protect, markAsRead);
 router.patch('/admin/:id/review',     protect, authorize('admin'), reviewNotification);
