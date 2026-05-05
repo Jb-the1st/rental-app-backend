@@ -1,15 +1,18 @@
 const express = require('express');
-const router = express.Router();
-
+const router  = express.Router();
 const {
   getNotifications,
+  createNotification,
+  markAsRead,
+  markAllAsRead,
   reviewNotification
 } = require('../controllers/notifications.controller');
-
 const { protect, authorize } = require('../middleware/auth.middleware');
 
-// Admin only
-router.get('/', protect, authorize('admin', 'owner', 'user'), getNotifications);
-router.patch('/:id/review', protect, authorize('admin', 'owner'), reviewNotification);
+router.get('/',                       protect, getNotifications);
+router.post('/',                      protect, authorize('admin'), createNotification);
+router.patch('/read-all',             protect, markAllAsRead);
+router.patch('/:id/read',             protect, markAsRead);
+router.patch('/admin/:id/review',     protect, authorize('admin'), reviewNotification);
 
 module.exports = router;

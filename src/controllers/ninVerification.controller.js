@@ -22,7 +22,7 @@ exports.submitNinVerification = async (req, res) => {
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    if (user.role === 'landlord') return res.status(400).json({ success: false, message: 'Already a landlord' });
+    if (user.role === 'owner') return res.status(400).json({ success: false, message: 'Already a owner' });
 
     if (user.firstName.toLowerCase() !== firstName.trim().toLowerCase() ||
         user.lastName.toLowerCase()  !== lastName.trim().toLowerCase())
@@ -82,7 +82,7 @@ exports.getVerificationStatus = async (req, res) => {
 
       const now = new Date().toISOString();
       await User.findByIdAndUpdate(req.user.id, {
-        role: 'landlord',
+        role: 'owner',
         'verifyOwner.status': 'verified',
         'verifyOwner.verifiedAt': now
       });
@@ -97,7 +97,7 @@ exports.getVerificationStatus = async (req, res) => {
     if (freshToken) {
       const updatedUser = await User.findById(req.user.id);
       response.token = freshToken;
-      response.message = 'You are now a landlord. Save the new token.';
+      response.message = 'You are now a owner. Save the new token.';
       response.user = updatedUser.toJSON();
     }
 
@@ -123,30 +123,42 @@ exports.reviewVerification = async (req, res) => {
     if (!['approve', 'reject'].includes(action))
       return res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" });
 
-    const verification = await NinVerification.findById(req.params.id).populate('user');
-    if (!verification) return res.status(404).json({ success: false, message: 'Verification not found' });
-    if (verification.status === 'verified') return res.status(400).json({ success: false, message: 'Already approved' });
+    const v = await NinVerification.findById(req.params.id).populate('user');
+    if (!v) return res.status(404).json({ success: false, message: 'Not found' });
+    if (v.status === 'verified')
+      return res.status(400).json({ success: false, message: 'Already approved' });
 
-    const now = new Date().toISOString();
+    const Notification = require('../models/Notification');
 
     if (action === 'approve') {
-      verification.status = 'verified';
-      verification.roleUpgraded = true;
-      verification.adminNote = adminNote || '';
-      await verification.save();
-      await User.findByIdAndUpdate(verification.user._id, {
-        role: 'landlord',
-        'verifyOwner.status': 'verified',
-        'verifyOwner.verifiedAt': now
+      v.status = 'verified'; v.roleUpgraded = true; v.adminNote = adminNote || '';
+      await v.save();
+      await User.findByIdAndUpdate(v.user._id, { role: 'owner' });
+
+      await Notification.create({
+        recipient: v.user._id,
+        type: 'owner_approved',
+        title: 'owner Request Approved',
+        message: `Congratulations ${v.firstName}! Your request to become a owner has been approved.`,
+        meta: { ninVerificationId: v._id }
       });
-      return res.json({ success: true, message: 'User approved as landlord' });
+
+      return res.json({ success: true, message: 'Approved as owner' });
     }
 
-    verification.status = 'failed';
-    verification.adminNote = adminNote || 'Rejected by admin';
-    await verification.save();
-    await User.findByIdAndUpdate(verification.user._id, { 'verifyOwner.status': 'failed' });
+    v.status = 'failed'; v.adminNote = adminNote || 'Rejected by admin';
+    await v.save();
 
-    res.json({ success: true, message: 'Verification rejected' });
-  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+    await Notification.create({
+      recipient: v.user._id,
+      type: 'owner_rejected',
+      title: 'owner Request Rejected',
+      message: `Your owner request was not approved. ${adminNote ? 'Reason: ' + adminNote : ''}`,
+      meta: { ninVerificationId: v._id }
+    });
+
+    res.json({ success: true, message: 'Rejected' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
