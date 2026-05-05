@@ -47,7 +47,7 @@ router.get('/google/callback',
       const token = generateToken(req.user._id);
 
       // ✅ Redirect to frontend with token
-      res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
+      res.redirect(`${process.env.FRONTEND_URL}/home?token=${token}`);
     } catch (err) {
       console.error('Google callback error:', err);
       res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
