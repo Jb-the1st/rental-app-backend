@@ -12,20 +12,25 @@ async (accessToken, refreshToken, profile, done) => {
     const email = profile.emails?.[0]?.value;
     if (!email) return done(new Error('No email found in Google profile'), null);
 
-    // Check if user already exists
-    let user = await User.findOne({ email });
+    // ✅ select('+password') because password has select: false
+    let user = await User.findOne({ email }).select('+password');
 
     if (user) {
-      // User exists — just return them
+      // ✅ Link googleId if user registered via email/password before
+      if (!user.googleId) {
+        user.googleId = profile.id;
+        await user.save();
+      }
       return done(null, user);
     }
 
-    // New user — create account
+    // ✅ New user — create account
     user = await User.create({
       firstName:       profile.name?.givenName  || profile.displayName || 'Google',
       lastName:        profile.name?.familyName || 'User',
       email,
-      phone:           0, // placeholder — they can update later
+      googleId:        profile.id,  // ✅ save googleId
+      phone:           '',          // ✅ empty string not 0
       password:        Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12),
       role:            'user',
       isEmailVerified: true,
@@ -38,6 +43,7 @@ async (accessToken, refreshToken, profile, done) => {
   }
 }));
 
+// ✅ Only needed if you use sessions elsewhere — safe to keep
 passport.serializeUser((user, done) => {
   done(null, user._id);
 });

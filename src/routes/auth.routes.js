@@ -6,9 +6,9 @@ const {
   login,
   getMe,
   logout,
-  requestEmailOTP,  // NEW
-  verifyEmail,      // CHANGED — now requires auth (called from profile)
-  resendOTP         // CHANGED — now requires auth
+  requestEmailOTP,
+  verifyEmail,
+  resendOTP
 } = require('../controllers/auth.controller');
 
 const { protect } = require('../middleware/auth.middleware');
@@ -21,33 +21,38 @@ router.post('/login', login);
 router.get('/me', protect, getMe);
 router.post('/logout', protect, logout);
 
-// Email verification — all three now require the user to be logged in
-// The flow is: login → go to profile → click "Verify Email" → OTP sent → enter OTP
-router.post('/request-email-otp', requestEmailOTP); // NEW — triggers OTP send
-router.post('/verify-email', verifyEmail);          // CHANGED — now protected
-router.post('/resend-otp', resendOTP);              // CHANGED — now protected
-
-// router.post('/verify-phone', protect, verifyPhone);
-// ↑ Phone verification is not part of the current flow — kept commented out
+// Email verification
+router.post('/request-email-otp', requestEmailOTP);
+router.post('/verify-email', verifyEmail);
+router.post('/resend-otp', resendOTP);
 
 // Google OAuth
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/google', passport.authenticate('google', { 
+  scope: ['profile', 'email'],
+  session: false  // ✅ no session, we use JWT
+}));
+
 router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login' }),
+  passport.authenticate('google', { 
+    failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_auth_failed`,
+    session: false  // ✅ no session, we use JWT
+  }),
   (req, res) => {
-    const token = generateToken(req.user._id);
-    res.redirect(`${process.env.FRONTEND_URL}/home?token=${token}`);
+    try {
+      // ✅ Guard — if for any reason user is missing
+      if (!req.user) {
+        return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_user`);
+      }
+
+      const token = generateToken(req.user._id);
+
+      // ✅ Redirect to frontend with token
+      res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
+    } catch (err) {
+      console.error('Google callback error:', err);
+      res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
+    }
   }
 );
-
-// // Facebook OAuth
-// router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
-// router.get('/facebook/callback',
-//   passport.authenticate('facebook', { failureRedirect: '/login' }),
-//   (req, res) => {
-//     const token = generateToken(req.user._id);
-//     res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
-//   }
-// );
 
 module.exports = router;
