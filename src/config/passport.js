@@ -27,7 +27,7 @@ async (accessToken, refreshToken, profile, done) => {
       email,
       phone:           0, // placeholder — they can update later
       password:        Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12),
-      role:            'tenant',
+      role:            'user',
       isEmailVerified: true,
       imageUrl:        profile.photos?.[0]?.value || ''
     });
