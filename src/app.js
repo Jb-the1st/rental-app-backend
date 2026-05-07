@@ -9,6 +9,7 @@ const passport = require('passport');
 const session = require('express-session');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
+const MongoStore = require('connect-mongo');
 
 app.set('trust proxy', 1);
 
@@ -47,16 +48,22 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // ✅ 6. Session & passport
+
+
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    // ttl and autoRemove are fine as they are
+  }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000
   }
-}));
-
+}));n
 app.use(passport.initialize());
 app.use(passport.session());
 
