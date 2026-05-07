@@ -41,6 +41,13 @@ router.get('/google/callback', (req, res, next) => {
     query: req.query,
     body: req.body
   });
+
+  // ✅ Validate the request looks like it comes from Google
+  if (!req.query.iss || !req.query.iss.startsWith('https://accounts.google.com')) {
+    console.error('Invalid Google callback: missing or invalid iss', req.query);
+    return res.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_callback`);
+  }
+
   passport.authenticate('google', { session: false }, (err, user, info) => {
     if (err) {
       console.error('Google callback auth error:', err);
