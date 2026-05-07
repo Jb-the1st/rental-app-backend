@@ -9,19 +9,24 @@ passport.use(new GoogleStrategy({
 },
 async (accessToken, refreshToken, profile, done) => {
   try {
-    const email = profile.emails?.[0]?.value;
+    const email = profile.emails?.[0]?.value?.toLowerCase();
     if (!email) return done(new Error('No email found in Google profile'), null);
 
-    // ✅ select('+password') because password has select: false
-    let user = await User.findOne({ email }).select('+password');
+    // 1) Prefer matching by googleId for returning Google users
+    let user = await User.findOne({ googleId: profile.id }).select('+password');
+
+    // 2) Fallback to email lookup for existing local accounts
+    if (!user) {
+      user = await User.findOne({ email }).select('+password');
+    }
 
     if (user) {
       // ✅ Link googleId if user registered via email/password before
       if (!user.googleId) {
         user.googleId = profile.id;
-        user.isEmailVerified = true;  // ✅ Mark email as verified since Google verified it
-        await user.save();
       }
+      user.isEmailVerified = true;  // ✅ Mark email as verified since Google verified it
+      await user.save();
       return done(null, user);
     }
 
@@ -40,6 +45,7 @@ async (accessToken, refreshToken, profile, done) => {
 
     return done(null, user);
   } catch (error) {
+    console.error('Google strategy failed:', error);
     return done(error, null);
   }
 }));
