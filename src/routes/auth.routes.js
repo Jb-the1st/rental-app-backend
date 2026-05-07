@@ -34,6 +34,13 @@ router.get('/google', passport.authenticate('google', {
 }));
 
 router.get('/google/callback', (req, res, next) => {
+  console.log('Google callback request:', {
+    url: req.url,
+    method: req.method,
+    headers: req.headers,
+    query: req.query,
+    body: req.body
+  });
   passport.authenticate('google', { session: false }, (err, user, info) => {
     if (err) {
       console.error('Google callback auth error:', err);
