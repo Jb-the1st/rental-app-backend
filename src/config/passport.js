@@ -19,6 +19,7 @@ async (accessToken, refreshToken, profile, done) => {
       // ✅ Link googleId if user registered via email/password before
       if (!user.googleId) {
         user.googleId = profile.id;
+        user.isEmailVerified = true;  // ✅ Mark email as verified since Google verified it
         await user.save();
       }
       return done(null, user);
