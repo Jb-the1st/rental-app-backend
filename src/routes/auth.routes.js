@@ -29,8 +29,7 @@ router.post('/resend-otp', resendOTP);
 // Google OAuth
 router.get('/google', passport.authenticate('google', { 
   scope: ['profile', 'email'],
-  session: false, // ✅ no session, we use JWT
-  prompt: 'select_account'
+  session: false // ✅ no session, we use JWT
 }));
 
 router.get('/google/callback', (req, res, next) => {
