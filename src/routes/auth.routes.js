@@ -57,7 +57,7 @@ router.get('/google/callback',
   secure: process.env.NODE_ENV === 'production',  // true in production, false in dev
   sameSite: "lax"
 });
-res.redirect(`${process.env.FRONTEND_URL}/callback`);
+res.redirect(`${process.env.FRONTEND_URL}/callback?token=${token}`);
     } catch (err) {
       console.error('❌ Google callback error:', err);
       res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
