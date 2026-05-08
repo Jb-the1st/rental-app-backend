@@ -49,7 +49,7 @@ app.use('/api/', limiter);
 
 // ✅ 6. Session & passport
 
-
+require('./config/passport');
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -63,11 +63,11 @@ app.use(session({
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000
   }
-}));n
+}));
 app.use(passport.initialize());
 app.use(passport.session());
 
-require('./config/passport');
+
 
 // ✅ 7. Swagger
 const swaggerSpec = swaggerJsdoc({
