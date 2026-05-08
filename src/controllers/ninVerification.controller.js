@@ -119,10 +119,9 @@ exports.getAllVerifications = async (req, res) => {
 // PATCH /api/nin-verification/admin/:id/review
 exports.reviewVerification = async (req, res) => {
   try {
-    const { action, adminNote } = req.body;
-    if (!['approved', 'rejected'].includes(action))
-      return res.status(400).json({ success: false, message: "action must be 'approved' or 'rejected'" });
-
+   const { status, adminNote } = req.body;
+    if (!['approved', 'rejected'].includes(status))
+  return res.status(400).json({ success: false, message: "status must be 'approved' or 'rejected'" });
     const v = await NinVerification.findById(req.params.id).populate('user');
     if (!v) return res.status(404).json({ success: false, message: 'Not found' });
     if (v.status === 'verified')
@@ -130,7 +129,7 @@ exports.reviewVerification = async (req, res) => {
 
     const Notification = require('../models/Notification');
 
-    if (action === 'approved') {
+    if (status === 'approved') {
       v.status = 'verified'; v.roleUpgraded = true; v.adminNote = adminNote || '';
       await v.save();
       await User.findByIdAndUpdate(v.user._id, { role: 'owner' });

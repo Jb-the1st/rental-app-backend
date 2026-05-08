@@ -63,16 +63,16 @@ exports.markAllAsRead = async (req, res) => {
 // PATCH /api/notifications/admin/:id/review  — approve or reject owner request + notify user
 exports.reviewNotification = async (req, res) => {
   try {
-    const { action, adminNote } = req.body;
-    if (!['approve', 'reject'].includes(action))
-      return res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" });
+    const { status, adminNote } = req.body;
+    if (!['approve', 'reject'].includes(status))
+      return res.status(400).json({ success: false, message: "status must be 'approve' or 'reject'" });
 
     const v = await NinVerification.findById(req.params.id).populate('user', 'firstName lastName email role');
     if (!v) return res.status(404).json({ success: false, message: 'Verification request not found' });
     if (v.status === 'verified')
       return res.status(400).json({ success: false, message: 'Already approved' });
 
-    if (action === 'approve') {
+    if (status === 'approve') {
       v.status = 'verified';
       v.roleUpgraded = true;
       v.adminNote = adminNote || '';
