@@ -18,7 +18,7 @@ const { generateToken } = require('../utils/jwt');
 // Email/Password auth
 router.post('/register', register);
 router.post('/login', login);
-router.get('/me', protect, getMe);
+router.get('/me', getMe);
 router.post('/logout', protect, logout);
 
 // Email verification
