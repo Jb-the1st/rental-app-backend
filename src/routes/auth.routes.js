@@ -52,7 +52,12 @@ router.get('/google/callback',
       console.log('✅ Token generated:', token);
       console.log('✅ Redirecting to:', `${process.env.FRONTEND_URL}/home?token=${token}`);
 
-      res.redirect(`${process.env.FRONTEND_URL}/callback?token=${token}`);
+      res.cookie("token", token, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',  // true in production, false in dev
+  sameSite: "lax"
+});
+res.redirect(`${process.env.FRONTEND_URL}/callback`);
     } catch (err) {
       console.error('❌ Google callback error:', err);
       res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
