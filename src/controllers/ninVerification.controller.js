@@ -120,8 +120,8 @@ exports.getAllVerifications = async (req, res) => {
 exports.reviewVerification = async (req, res) => {
   try {
     const { action, adminNote } = req.body;
-    if (!['approve', 'reject'].includes(action))
-      return res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" });
+    if (!['approved', 'rejected'].includes(action))
+      return res.status(400).json({ success: false, message: "action must be 'approved' or 'rejected'" });
 
     const v = await NinVerification.findById(req.params.id).populate('user');
     if (!v) return res.status(404).json({ success: false, message: 'Not found' });
@@ -130,7 +130,7 @@ exports.reviewVerification = async (req, res) => {
 
     const Notification = require('../models/Notification');
 
-    if (action === 'approve') {
+    if (action === 'approved') {
       v.status = 'verified'; v.roleUpgraded = true; v.adminNote = adminNote || '';
       await v.save();
       await User.findByIdAndUpdate(v.user._id, { role: 'owner' });

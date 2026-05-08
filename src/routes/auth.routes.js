@@ -35,7 +35,7 @@ router.get('/google', passport.authenticate('google', {
 // auth.js — add these logs temporarily
 router.get('/google/callback',
   passport.authenticate('google', { 
-    failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_auth_failed`,
+    failureRedirect: `${process.env.FRONTEND_URL}/?error=google_auth_failed`,
     session: false
   }),
   (req, res) => {
@@ -45,22 +45,22 @@ router.get('/google/callback',
 
       if (!req.user) {
         console.log('❌ No user on req');
-        return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_user`);
+        return res.redirect(`${process.env.FRONTEND_URL}/?error=no_user`);
       }
 
       const token = generateToken(req.user._id);
       console.log('✅ Token generated:', token);
-      console.log('✅ Redirecting to:', `${process.env.FRONTEND_URL}/home?token=${token}`);
+      console.log('✅ Redirecting to:', `${process.env.FRONTEND_URL}/callback?token=${token}`);
 
       res.cookie("token", token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',  // true in production, false in dev
-  sameSite: "lax"
-});
-res.redirect(`${process.env.FRONTEND_URL}/callback?token=${token}`);
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',  // true in production, false in dev
+      sameSite: "lax"
+      });
+      res.redirect(`${process.env.FRONTEND_URL}/callback?token=${token}`);
     } catch (err) {
       console.error('❌ Google callback error:', err);
-      res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
+      res.redirect(`${process.env.FRONTEND_URL}/?error=server_error`);
     }
   }
 );
