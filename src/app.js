@@ -9,8 +9,7 @@ const passport = require('passport');
 const session = require('express-session');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
-const MongoStore = require('connect-mongo');
-
+const MongoStore = require('connect-mongo').default;
 app.set('trust proxy', 1);
 
 // ✅ 1. CORS must be FIRST — before everything including helmet
@@ -51,18 +50,13 @@ app.use('/api/', limiter);
 
 require('./config/passport');
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: 'your_secret_key',
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI,
-    // ttl and autoRemove are fine as they are
-  }),
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
-  }
+    mongoUrl: 'mongodb://localhost:27017/test-app', // Replace with your DB URI
+    // ttl: 14 * 24 * 60 * 60 // Optional: sessions expire in 14 days
+  })
 }));
 app.use(passport.initialize());
 app.use(passport.session());
