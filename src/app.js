@@ -52,7 +52,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI,    // ✅ real DB URI not localhost
+    mongoUrl: process.env.MONGODB_URI,    // ✅ real DB URI not localhost
   })
 }));
 app.use(passport.initialize());
