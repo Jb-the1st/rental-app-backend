@@ -54,10 +54,9 @@ exports.submitNinVerification = async (req, res) => {
 
     // Sync into user.verifyOwner — frontend reads this from the user object
     const patch = {
-      NIN: parseInt(nin),  // Send as number if frontend expects it
+      NIN: nin,  // Keep as string to avoid frontend parsing issues
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      DoB: (DoB && DoB.trim()) ? DoB : undefined,  // Only include if provided and not empty
       address: currentAddress.trim(),
       status: 'processing',
       verifiedAt: ''
