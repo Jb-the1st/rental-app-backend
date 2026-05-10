@@ -12,6 +12,10 @@ const syncVerifyOwner = async (userId, patch) => {
 // POST /api/nin-verification/submit
 exports.submitNinVerification = async (req, res) => {
   try {
+    console.log('NIN verification submit received:', {
+      userId: req.user?.id,
+      body: req.body
+    });
     const { nin, firstName, lastName, currentAddress, DoB } = req.body;
 
     if (!nin || !firstName || !lastName || !currentAddress)
