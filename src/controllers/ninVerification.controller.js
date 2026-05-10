@@ -121,10 +121,16 @@ exports.reviewVerification = async (req, res) => {
   try {
    const { status, adminNote } = req.body;
     if (!['approved', 'rejected'].includes(status))
-  return res.status(400).json({ success: false, message: "status must be 'approved' or 'rejected'" });
-    const v = await NinVerification.findById(req.params.id).populate('user');
-    if (!v) return res.status(404).json({ success: false, message: 'Not found' });
-    if (v.status === 'verified')
+      return res.status(400).json({ success: false, message: "status must be 'approved' or 'rejected'" });
+
+    const lookup = {
+      $or: [
+        { _id: req.params.id },
+        { user: req.params.id }
+      ]
+    };
+
+    const v = await NinVerification.findOne(lookup).populate('user');
       return res.status(400).json({ success: false, message: 'Already approved' });
 
     const Notification = require('../models/Notification');
