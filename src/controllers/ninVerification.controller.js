@@ -131,6 +131,8 @@ exports.reviewVerification = async (req, res) => {
     };
 
     const v = await NinVerification.findOne(lookup).populate('user');
+    if (!v) return res.status(404).json({ success: false, message: 'Not found' });
+    if (v.status === 'verified')
       return res.status(400).json({ success: false, message: 'Already approved' });
 
     const Notification = require('../models/Notification');
