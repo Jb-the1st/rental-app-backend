@@ -38,6 +38,7 @@ exports.submitNinVerification = async (req, res) => {
 
     const deadline = new Date(Date.now() + getDelayMs());
 
+    console.log('About to create/update verification');
     if (existing) {
       Object.assign(existing, { nin, firstName: firstName.trim(), lastName: lastName.trim(),
         currentAddress: currentAddress.trim(), status: 'processing',
@@ -49,19 +50,25 @@ exports.submitNinVerification = async (req, res) => {
         currentAddress: currentAddress.trim(),
         status: 'processing', submittedAt: new Date(), verificationDeadline: deadline });
     }
+    console.log('Verification created/updated');
 
     // Sync into user.verifyOwner — frontend reads this from the user object
-    await syncVerifyOwner(user._id, {
-      NIN: nin,  // Keep as string, not parseInt
+    const patch = {
+      NIN: parseInt(nin),  // Send as number if frontend expects it
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       DoB: (DoB && DoB.trim()) ? DoB : undefined,  // Only include if provided and not empty
       address: currentAddress.trim(),
       status: 'processing',
       verifiedAt: ''
-    });
+    };
+    console.log('About to sync verifyOwner', patch);
+    await syncVerifyOwner(user._id, patch);
+    console.log('Synced');
 
+    console.log('About to find updated user');
     const updatedUser = await User.findById(user._id);
+    console.log('Response sent');
     res.status(201).json({
       success: true,
       message: 'Verification submitted. Your NIN is being verified.',
