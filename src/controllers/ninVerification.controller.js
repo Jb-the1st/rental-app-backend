@@ -52,7 +52,7 @@ exports.submitNinVerification = async (req, res) => {
 
     // Sync into user.verifyOwner — frontend reads this from the user object
     await syncVerifyOwner(user._id, {
-      NIN: parseInt(nin),
+      NIN: nin,  // Keep as string, not parseInt
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       DoB: DoB || '',
