@@ -55,7 +55,7 @@ exports.submitNinVerification = async (req, res) => {
       NIN: nin,  // Keep as string, not parseInt
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      DoB: DoB || '',
+      DoB: (DoB && DoB.trim()) ? DoB : undefined,  // Only include if provided and not empty
       address: currentAddress.trim(),
       status: 'processing',
       verifiedAt: ''
