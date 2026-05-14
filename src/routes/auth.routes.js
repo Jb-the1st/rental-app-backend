@@ -56,35 +56,22 @@ router.get('/google/callback',
       next();
     })(req, res, next);
   },
-  (req, res) => {
+ (req, res) => {
     try {
       const token = generateToken(req.user._id);
       const user = req.user.toJSON();
-      res.redirect(`${process.env.FRONTEND_URL}/callback?success=true&token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
-      // ✅ Send token + user back to the frontend popup
-      // This is the same shape as normal login: { success, token, user }
-      // res.send(`
-      //   <script>
-      //     window.opener.postMessage(
-      //       ${JSON.stringify({ success: true, token, user })},
-      //       '${process.env.FRONTEND_URL}'
-      //     );
-      //     window.close();
-      //   </script>
-      // `);
+
+      // ✅ Redirect popup to a frontend page that will postMessage and close
+      const params = new URLSearchParams({
+        token,
+        user: JSON.stringify(user)
+      });
+
+      res.redirect(`${process.env.FRONTEND_URL}callback?${params}`);
     } catch (err) {
       console.error('❌ Google callback error:', err);
-      res.send(`
-        <script>
-          window.opener.postMessage(
-            ${JSON.stringify({ success: false, message: 'Server error' })},
-            '${process.env.FRONTEND_URL}'
-          );
-          window.close();
-        </script>
-      `);
+      res.redirect(`${process.env.FRONTEND_URL}callback?error=server_error`);
     }
-  }
+  },
 );
-
 module.exports = router;
