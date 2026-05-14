@@ -60,18 +60,18 @@ router.get('/google/callback',
     try {
       const token = generateToken(req.user._id);
       const user = req.user.toJSON();
-
+      res.redirect(`${process.env.FRONTEND_URL}/callback?success=true&token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
       // ✅ Send token + user back to the frontend popup
       // This is the same shape as normal login: { success, token, user }
-      res.send(`
-        <script>
-          window.opener.postMessage(
-            ${JSON.stringify({ success: true, token, user })},
-            '${process.env.FRONTEND_URL}'
-          );
-          window.close();
-        </script>
-      `);
+      // res.send(`
+      //   <script>
+      //     window.opener.postMessage(
+      //       ${JSON.stringify({ success: true, token, user })},
+      //       '${process.env.FRONTEND_URL}'
+      //     );
+      //     window.close();
+      //   </script>
+      // `);
     } catch (err) {
       console.error('❌ Google callback error:', err);
       res.send(`
