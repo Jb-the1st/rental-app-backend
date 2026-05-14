@@ -67,10 +67,10 @@ router.get('/google/callback',
         user: JSON.stringify(user)
       });
 
-      res.redirect(`${process.env.FRONTEND_URL}callback?${params}`);
+      res.redirect(`${process.env.FRONTEND_URL}/callback?${params}`);
     } catch (err) {
       console.error('❌ Google callback error:', err);
-      res.redirect(`${process.env.FRONTEND_URL}callback?error=server_error`);
+      res.redirect(`${process.env.FRONTEND_URL}/callback?error=server_error`);
     }
   },
 );
