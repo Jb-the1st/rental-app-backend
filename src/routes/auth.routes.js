@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const crypto = require('crypto');
 
 const {
   register,
@@ -15,9 +14,6 @@ const {
 const { protect } = require('../middleware/auth.middleware');
 const passport = require('passport');
 const { generateToken } = require('../utils/jwt');
-
-// Temporary in-memory store for auth codes
-const tempTokenStore = new Map();
 
 // Email/Password auth
 router.post('/register', register);
@@ -36,7 +32,7 @@ router.get('/google', passport.authenticate('google', {
   session: false
 }));
 
-// Google OAuth — Step 2: callback from Google
+// Google OAuth — Step 2: Google redirects back here after login
 router.get('/google/callback',
   (req, res, next) => {
     passport.authenticate('google', {
@@ -45,7 +41,16 @@ router.get('/google/callback',
     }, (err, user) => {
       if (err || !user) {
         console.error('❌ Passport error:', err);
-        return res.redirect(`${process.env.FRONTEND_URL}/?error=auth_failed`);
+        // ✅ Send error back to popup
+        return res.send(`
+          <script>
+            window.opener.postMessage(
+              ${JSON.stringify({ success: false, message: 'Google auth failed' })},
+              '${process.env.FRONTEND_URL}'
+            );
+            window.close();
+          </script>
+        `);
       }
       req.user = user;
       next();
@@ -54,57 +59,32 @@ router.get('/google/callback',
   (req, res) => {
     try {
       const token = generateToken(req.user._id);
+      const user = req.user.toJSON();
 
-      // Generate a short-lived one-time code
-      const code = crypto.randomBytes(20).toString('hex');
-
-      // Store token + user against code, expires in 2 minutes
-      tempTokenStore.set(code, {
-        token,
-        user: req.user.toJSON(),
-        expiresAt: Date.now() + 2 * 60 * 1000
-      });
-
-      console.log('✅ Code generated, redirecting to /auth/success');
-
-      // Redirect with short code — NOT the token
-      res.redirect(`${process.env.FRONTEND_URL}/auth/success?code=${code}`);
+      // ✅ Send token + user back to the frontend popup
+      // This is the same shape as normal login: { success, token, user }
+      res.send(`
+        <script>
+          window.opener.postMessage(
+            ${JSON.stringify({ success: true, token, user })},
+            '${process.env.FRONTEND_URL}'
+          );
+          window.close();
+        </script>
+      `);
     } catch (err) {
       console.error('❌ Google callback error:', err);
-      res.redirect(`${process.env.FRONTEND_URL}/?error=server_error`);
+      res.send(`
+        <script>
+          window.opener.postMessage(
+            ${JSON.stringify({ success: false, message: 'Server error' })},
+            '${process.env.FRONTEND_URL}'
+          );
+          window.close();
+        </script>
+      `);
     }
   }
 );
-
-// Google OAuth — Step 3: frontend exchanges code for token
-// Returns same shape as normal login
-router.get('/google/token', (req, res) => {
-  const { code } = req.query;
-
-  if (!code) {
-    return res.status(400).json({ success: false, message: 'No code provided' });
-  }
-
-  const data = tempTokenStore.get(code);
-
-  if (!data) {
-    return res.status(400).json({ success: false, message: 'Invalid or expired code' });
-  }
-
-  if (Date.now() > data.expiresAt) {
-    tempTokenStore.delete(code);
-    return res.status(400).json({ success: false, message: 'Code expired, please login again' });
-  }
-
-  // Delete so code can't be reused
-  tempTokenStore.delete(code);
-
-  // ✅ Identical response to normal login
-  res.json({
-    success: true,
-    token: data.token,
-    user: data.user
-  });
-});
 
 module.exports = router;
