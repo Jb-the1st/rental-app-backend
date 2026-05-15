@@ -17,7 +17,7 @@ exports.submitNinVerification = async (req, res) => {
       body: req.body
     });
     const { nin, firstName, lastName, currentAddress, DoB } = req.body;
-
+    console.log(req.body)
     if (!nin || !firstName || !lastName || !currentAddress)
       return res.status(400).json({ success: false, message: 'nin, firstName, lastName and currentAddress are all required' });
 
