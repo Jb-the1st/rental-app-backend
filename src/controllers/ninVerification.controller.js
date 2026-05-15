@@ -1,10 +1,10 @@
-const User = require('../models/User');
+const User            = require('../models/User');
 const NinVerification = require('../models/NinVerification');
+const Notification    = require('../models/Notification');
 const { generateToken } = require('../utils/jwt');
 
 const getDelayMs = () => parseFloat(process.env.NIN_VERIFICATION_DELAY_HOURS || 24) * 3600000;
 
-// Keeps user.verifyOwner in sync so frontend always sees it on the user object
 const syncVerifyOwner = async (userId, patch) => {
   await User.findByIdAndUpdate(userId, { $set: { verifyOwner: patch } });
 };
@@ -12,12 +12,8 @@ const syncVerifyOwner = async (userId, patch) => {
 // POST /api/nin-verification/submit
 exports.submitNinVerification = async (req, res) => {
   try {
-    console.log('NIN verification submit received:', {
-      userId: req.user?.id,
-      body: req.body
-    });
-    const { nin, firstName, lastName, currentAddress, DoB } = req.body;
-    console.log(req.body)
+    const { nin, firstName, lastName, currentAddress } = req.body;
+
     if (!nin || !firstName || !lastName || !currentAddress)
       return res.status(400).json({ success: false, message: 'nin, firstName, lastName and currentAddress are all required' });
 
@@ -26,7 +22,7 @@ exports.submitNinVerification = async (req, res) => {
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    if (user.role === 'owner') return res.status(400).json({ success: false, message: 'Already a owner' });
+    if (user.role === 'owner') return res.status(400).json({ success: false, message: 'Already an owner' });
 
     if (user.firstName.toLowerCase() !== firstName.trim().toLowerCase() ||
         user.lastName.toLowerCase()  !== lastName.trim().toLowerCase())
@@ -37,37 +33,48 @@ exports.submitNinVerification = async (req, res) => {
       return res.status(400).json({ success: false, message: `Request already exists with status: ${existing.status}` });
 
     const deadline = new Date(Date.now() + getDelayMs());
+    let ninRecord;
 
-    console.log('About to create/update verification');
     if (existing) {
-      Object.assign(existing, { nin, firstName: firstName.trim(), lastName: lastName.trim(),
+      Object.assign(existing, {
+        nin, firstName: firstName.trim(), lastName: lastName.trim(),
         currentAddress: currentAddress.trim(), status: 'processing',
-        submittedAt: new Date(), verificationDeadline: deadline, adminNote: '', roleUpgraded: false });
+        submittedAt: new Date(), verificationDeadline: deadline,
+        adminNote: '', roleUpgraded: false
+      });
       await existing.save();
+      ninRecord = existing;
     } else {
-      await NinVerification.create({ user: user._id, nin,
+      ninRecord = await NinVerification.create({
+        user: user._id, nin,
         firstName: firstName.trim(), lastName: lastName.trim(),
         currentAddress: currentAddress.trim(),
-        status: 'processing', submittedAt: new Date(), verificationDeadline: deadline });
+        status: 'processing', submittedAt: new Date(), verificationDeadline: deadline
+      });
     }
-    console.log('Verification created/updated');
 
-    // Sync into user.verifyOwner — frontend reads this from the user object
-    const patch = {
-      NIN: nin,  // Keep as string to avoid frontend parsing issues
+    await syncVerifyOwner(user._id, {
+      NIN: nin,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       address: currentAddress.trim(),
       status: 'processing',
       verifiedAt: ''
-    };
-    console.log('About to sync verifyOwner', patch);
-    await syncVerifyOwner(user._id, patch);
-    console.log('Synced');
+    });
 
-    console.log('About to find updated user');
+    // Notify all admins of new owner request
+    const datetime = new Date().toISOString();
+    const admins = await User.find({ role: 'admin' }).select('_id');
+    if (admins.length > 0) {
+      await Notification.insertMany(admins.map(admin => ({
+        userId:   admin._id,
+        message:  `${firstName.trim()} ${lastName.trim()} has submitted a request to become an owner.`,
+        datetime,
+        isRead:   false
+      })));
+    }
+
     const updatedUser = await User.findById(user._id);
-    console.log('Response sent');
     res.status(201).json({
       success: true,
       message: 'Verification submitted. Your NIN is being verified.',
@@ -107,7 +114,7 @@ exports.getVerificationStatus = async (req, res) => {
     if (freshToken) {
       const updatedUser = await User.findById(req.user.id);
       response.token = freshToken;
-      response.message = 'You are now a owner. Save the new token.';
+      response.message = 'You are now an owner. Save the new token.';
       response.user = updatedUser.toJSON();
     }
 
@@ -129,53 +136,75 @@ exports.getAllVerifications = async (req, res) => {
 // PATCH /api/nin-verification/admin/:id/review
 exports.reviewVerification = async (req, res) => {
   try {
-   const { status, adminNote } = req.body;
+    const { status, adminNote } = req.body;
     if (!['approved', 'rejected'].includes(status))
       return res.status(400).json({ success: false, message: "status must be 'approved' or 'rejected'" });
 
-    const lookup = {
-      $or: [
-        { _id: req.params.id },
-        { user: req.params.id }
-      ]
-    };
+    const v = await NinVerification.findOne({
+      $or: [{ _id: req.params.id }, { user: req.params.id }]
+    }).populate('user');
 
-    const v = await NinVerification.findOne(lookup).populate('user');
     if (!v) return res.status(404).json({ success: false, message: 'Not found' });
     if (v.status === 'verified')
       return res.status(400).json({ success: false, message: 'Already approved' });
 
-    const Notification = require('../models/Notification');
+    const datetime = new Date().toISOString();
 
     if (status === 'approved') {
       v.status = 'verified'; v.roleUpgraded = true; v.adminNote = adminNote || '';
       await v.save();
-      await User.findByIdAndUpdate(v.user._id, { role: 'owner' });
-
-      await Notification.create({
-        recipient: v.user._id,
-        type: 'owner_approved',
-        title: 'owner Request Approved',
-        message: `Congratulations ${v.firstName}! Your request to become a owner has been approved.`,
-        meta: { ninVerificationId: v._id }
+      await User.findByIdAndUpdate(v.user._id, {
+        role: 'owner',
+        'verifyOwner.status': 'verified',
+        'verifyOwner.verifiedAt': datetime
       });
+
+      // Notify the user
+      await Notification.create({
+        userId:  v.user._id,
+        message: `Congratulations ${v.firstName}! Your request to become an owner has been approved. You can now list properties.`,
+        datetime,
+        isRead:  false
+      });
+
+      // Notify all admins
+      const admins = await User.find({ role: 'admin' }).select('_id');
+      if (admins.length > 0) {
+        await Notification.insertMany(admins.map(admin => ({
+          userId:  admin._id,
+          message: `${v.firstName} ${v.lastName} has been approved as an owner.`,
+          datetime,
+          isRead:  false
+        })));
+      }
 
       return res.json({ success: true, message: 'Approved as owner' });
     }
 
+    // Reject
     v.status = 'failed'; v.adminNote = adminNote || 'Rejected by admin';
     await v.save();
+    await User.findByIdAndUpdate(v.user._id, { 'verifyOwner.status': 'failed' });
 
+    // Notify the user
     await Notification.create({
-      recipient: v.user._id,
-      type: 'owner_rejected',
-      title: 'owner Request Rejected',
-      message: `Your owner request was not approved. ${adminNote ? 'Reason: ' + adminNote : ''}`,
-      meta: { ninVerificationId: v._id }
+      userId:  v.user._id,
+      message: `Your request to become an owner was not approved. ${adminNote ? 'Reason: ' + adminNote : 'Please contact support for more information.'}`,
+      datetime,
+      isRead:  false
     });
 
+    // Notify all admins
+    const admins = await User.find({ role: 'admin' }).select('_id');
+    if (admins.length > 0) {
+      await Notification.insertMany(admins.map(admin => ({
+        userId:  admin._id,
+        message: `${v.firstName} ${v.lastName}'s owner request has been rejected.`,
+        datetime,
+        isRead:  false
+      })));
+    }
+
     res.json({ success: true, message: 'Rejected' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };

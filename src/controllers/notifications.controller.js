@@ -6,12 +6,10 @@ const User            = require('../models/User');
 // User gets their own. Admin gets all.
 exports.getNotifications = async (req, res) => {
   try {
-    const filter = req.user.role === 'admin' ? {} : { recipient: req.user._id };
-    if (req.query.status === 'unread') filter.isRead = false;
+    const filter = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    if (req.query.isRead !== undefined) filter.isRead = req.query.isRead === 'true';
 
-    const notifications = await Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .populate('recipient', 'firstName lastName email imageUrl role');
+    const notifications = await Notification.find(filter).sort({ createdAt: -1 });
 
     res.json({ success: true, count: notifications.length, notifications });
   } catch (error) {
@@ -19,25 +17,32 @@ exports.getNotifications = async (req, res) => {
   }
 };
 
-// POST /api/notifications  — internal or admin use
+// POST /api/notifications
 exports.createNotification = async (req, res) => {
   try {
-    const { recipient, type, title, message, meta } = req.body;
-    if (!recipient || !title || !message)
-      return res.status(400).json({ success: false, message: 'recipient, title, and message are required' });
+    const { userId, message, datetime, isRead } = req.body;
 
-    const notification = await Notification.create({ recipient, type, title, message, meta: meta || {} });
+    if (!userId || !message || !datetime)
+      return res.status(400).json({ success: false, message: 'userId, message and datetime are required' });
+
+    const notification = await Notification.create({
+      userId,
+      message,
+      datetime,
+      isRead: isRead || false
+    });
+
     res.status(201).json({ success: true, notification });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// PATCH /api/notifications/:id/read  — mark one as read
+// PATCH /api/notifications/:id/read
 exports.markAsRead = async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
-      { _id: req.params.id, recipient: req.user._id },
+      { _id: req.params.id, userId: req.user._id },
       { isRead: true },
       { new: true }
     );
@@ -50,80 +55,80 @@ exports.markAsRead = async (req, res) => {
   }
 };
 
-// PATCH /api/notifications/read-all  — mark all as read
+// PATCH /api/notifications/read-all
 exports.markAllAsRead = async (req, res) => {
   try {
-    await Notification.updateMany({ recipient: req.user._id, isRead: false }, { isRead: true });
+    await Notification.updateMany({ userId: req.user._id, isRead: false }, { isRead: true });
     res.json({ success: true, message: 'All notifications marked as read' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// PATCH /api/notifications/admin/:id/review  — approve or reject owner request + notify user
+// PATCH /api/notifications/admin/:id/review
 exports.reviewNotification = async (req, res) => {
   try {
     const { status, adminNote } = req.body;
-    if (!['approve', 'reject'].includes(status))
-      return res.status(400).json({ success: false, message: "status must be 'approve' or 'reject'" });
+    if (!['approved', 'rejected'].includes(status))
+      return res.status(400).json({ success: false, message: "status must be 'approved' or 'rejected'" });
 
-    const v = await NinVerification.findById(req.params.id).populate('user', 'firstName lastName email role');
+    const v = await NinVerification.findOne({
+      $or: [{ _id: req.params.id }, { user: req.params.id }]
+    }).populate('user', 'firstName lastName email role');
+
     if (!v) return res.status(404).json({ success: false, message: 'Verification request not found' });
     if (v.status === 'verified')
       return res.status(400).json({ success: false, message: 'Already approved' });
 
-    if (status === 'approve') {
-      v.status = 'verified';
-      v.roleUpgraded = true;
-      v.adminNote = adminNote || '';
+    const datetime = new Date().toISOString();
+
+    if (status === 'approved') {
+      v.status = 'verified'; v.roleUpgraded = true; v.adminNote = adminNote || '';
       await v.save();
       await User.findByIdAndUpdate(v.user._id, { role: 'owner' });
 
       // Notify the user
       await Notification.create({
-        recipient: v.user._id,
-        type: 'owner_approved',
-        title: 'owner Request Approved',
-        message: `Congratulations ${v.firstName}! Your request to become a owner has been approved. You can now list properties.`,
-        meta: { ninVerificationId: v._id }
+        userId:   v.user._id,
+        message:  `Congratulations ${v.firstName}! Your request to become an owner has been approved. You can now list properties.`,
+        datetime,
+        isRead:   false
       });
 
       // Notify all admins
       const admins = await User.find({ role: 'admin' }).select('_id');
-      await Notification.insertMany(admins.map(admin => ({
-        recipient: admin._id,
-        type: 'owner_approved',
-        title: 'owner Request Approved',
-        message: `${v.firstName} ${v.lastName} has been approved as a owner.`,
-        meta: { ninVerificationId: v._id, userId: v.user._id }
-      })));
+      if (admins.length > 0) {
+        await Notification.insertMany(admins.map(admin => ({
+          userId:   admin._id,
+          message:  `${v.firstName} ${v.lastName} has been approved as an owner.`,
+          datetime,
+          isRead:   false
+        })));
+      }
 
       return res.json({ success: true, message: `${v.firstName} ${v.lastName} approved as owner` });
     }
 
     // Reject
-    v.status = 'failed';
-    v.adminNote = adminNote || 'Rejected by admin';
+    v.status = 'failed'; v.adminNote = adminNote || 'Rejected by admin';
     await v.save();
 
-    // Notify the user
     await Notification.create({
-      recipient: v.user._id,
-      type: 'owner_rejected',
-      title: 'owner Request Rejected',
-      message: `Your request to become a owner was not approved. ${adminNote ? 'Reason: ' + adminNote : 'Please contact support for more information.'}`,
-      meta: { ninVerificationId: v._id }
+      userId:   v.user._id,
+      message:  `Your request to become an owner was not approved. ${adminNote ? 'Reason: ' + adminNote : 'Please contact support for more information.'}`,
+      datetime,
+      isRead:   false
     });
 
-    // Notify all admins
     const admins = await User.find({ role: 'admin' }).select('_id');
-    await Notification.insertMany(admins.map(admin => ({
-      recipient: admin._id,
-      type: 'owner_rejected',
-      title: 'owner Request Rejected',
-      message: `${v.firstName} ${v.lastName}'s owner request has been rejected.`,
-      meta: { ninVerificationId: v._id, userId: v.user._id }
-    })));
+    if (admins.length > 0) {
+      await Notification.insertMany(admins.map(admin => ({
+        userId:   admin._id,
+        message:  `${v.firstName} ${v.lastName}'s owner request has been rejected.`,
+        datetime,
+        isRead:   false
+      })));
+    }
 
     res.json({ success: true, message: `${v.firstName} ${v.lastName} rejected` });
   } catch (error) {
