@@ -56,8 +56,8 @@ exports.updateBookingStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
-    if (!['accepted', 'declined'].includes(status))
-      return res.status(400).json({ success: false, message: "status must be 'accepted' or 'declined'" });
+    if (!['accepted', 'declined', 'cancelled'].includes(status))
+      return res.status(400).json({ success: false, message: "status must be 'accepted', 'declined', or 'cancelled'" });
 
     const booking = await Booking.findById(req.params.id)
       .populate('property');
